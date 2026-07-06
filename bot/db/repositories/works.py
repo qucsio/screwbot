@@ -60,6 +60,21 @@ async def filter_beats(
     return list(res.scalars().all())
 
 
+async def list_creator_works(session: AsyncSession, creator_id: int) -> list[Work]:
+    res = await session.execute(
+        select(Work).where(Work.creator_id == creator_id).order_by(Work.id.desc())
+    )
+    return list(res.scalars().all())
+
+
+async def get_creator_work(session: AsyncSession, work_id: int, creator_id: int) -> Work | None:
+    """Работа с проверкой владельца — чтобы нельзя было редактировать чужую."""
+    res = await session.execute(
+        select(Work).where(Work.id == work_id, Work.creator_id == creator_id)
+    )
+    return res.scalar_one_or_none()
+
+
 async def get_work_with_author(
     session: AsyncSession, work_id: int
 ) -> tuple[Work, User] | None:

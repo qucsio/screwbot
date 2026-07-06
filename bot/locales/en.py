@@ -142,4 +142,38 @@ TEXTS = {
     "client_order_completed": "🎉 Order #{order_id} completed. Thank you!",
     "order_cancelled_client": "Order #{order_id} cancelled.",
     "admin_order_cancelled": "⚠️ Client cancelled order #{order_id}. Returned to moderation.",
+    "profile_only_creator": "⛔ The cabinet is available only to approved creators.",
+    "profile_title": (
+        "👤 <b>Creator cabinet</b>\n\n"
+        "Service: {service}\n"
+        "Socials: {socials}\n"
+        "Description: {desc}\n\n"
+        "💵 Balance for payout: <b>{balance} ₽</b>"
+    ),
+    "btn_edit_socials": "🔗 Socials",
+    "btn_edit_desc": "📝 Description",
+    "btn_my_works": "🎵 My works",
+    "btn_add_beat": "➕ Add beat",
+    "profile_ask_socials": "Send your new social links in one message:",
+    "profile_ask_desc": "Send your new description:",
+    "profile_saved": "✅ Saved.",
+    "add_beat_hint": "To add a beat, send the /addbeat command",
+    "works_empty": "You have no uploaded works yet.",
+    "works_list_title": "🎵 Your works (tap to edit):",
+    "work_detail": (
+        "🎵 <b>{title}</b>\n"
+        "Genre: {genre} | Key: {key} | BPM: {bpm}\n"
+        "💸 Rent: {rent} ₽ | 💰 Buyout: {buy} ₽\n"
+        "Status: {status}"
+    ),
+    "btn_price_rent": "💸 Rent price",
+    "btn_price_buy": "💰 Buyout price",
+    "btn_delete_work": "🗑 Delete",
+    "work_ask_price": "Enter the new price (number):",
+    "work_price_invalid": "Enter the price as a number.",
+    "work_price_updated": "✅ Price updated.",
+    "work_deleted": "🗑 Work deleted.",
+    "status_pending": "⏳ under moderation",
+    "status_approved": "✅ in catalog",
+    "status_rejected": "❌ rejected",
 }

@@ -148,4 +148,39 @@ TEXTS = {
     "client_order_completed": "🎉 Заказ #{order_id} завершён. Спасибо!",
     "order_cancelled_client": "Заказ #{order_id} отменён.",
     "admin_order_cancelled": "⚠️ Клиент отменил заказ #{order_id}. Возвращён на модерацию.",
+    # --- Личный кабинет исполнителя ---
+    "profile_only_creator": "⛔ Личный кабинет доступен только одобренным исполнителям.",
+    "profile_title": (
+        "👤 <b>Личный кабинет</b>\n\n"
+        "Услуга: {service}\n"
+        "Соцсети: {socials}\n"
+        "Описание: {desc}\n\n"
+        "💵 Баланс к выводу: <b>{balance} ₽</b>"
+    ),
+    "btn_edit_socials": "🔗 Соцсети",
+    "btn_edit_desc": "📝 Описание",
+    "btn_my_works": "🎵 Мои работы",
+    "btn_add_beat": "➕ Добавить бит",
+    "profile_ask_socials": "Пришлите новые ссылки на соцсети одним сообщением:",
+    "profile_ask_desc": "Пришлите новое описание:",
+    "profile_saved": "✅ Сохранено.",
+    "add_beat_hint": "Чтобы добавить бит, отправьте команду /addbeat",
+    "works_empty": "У вас пока нет загруженных работ.",
+    "works_list_title": "🎵 Ваши работы (нажмите для редактирования):",
+    "work_detail": (
+        "🎵 <b>{title}</b>\n"
+        "Жанр: {genre} | Тон: {key} | BPM: {bpm}\n"
+        "💸 Аренда: {rent} ₽ | 💰 Выкуп: {buy} ₽\n"
+        "Статус: {status}"
+    ),
+    "btn_price_rent": "💸 Цена аренды",
+    "btn_price_buy": "💰 Цена выкупа",
+    "btn_delete_work": "🗑 Удалить",
+    "work_ask_price": "Введите новую цену (число):",
+    "work_price_invalid": "Введите цену числом.",
+    "work_price_updated": "✅ Цена обновлена.",
+    "work_deleted": "🗑 Работа удалена.",
+    "status_pending": "⏳ на модерации",
+    "status_approved": "✅ в каталоге",
+    "status_rejected": "❌ отклонена",
 }
