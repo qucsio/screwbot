@@ -103,4 +103,43 @@ TEXTS = {
         "Client: {contact}\nAuthor: {author}\n"
         "Rent: {rent} ₽ | Buyout: {buy} ₽"
     ),
+    "order_only_client": "⛔ Only clients can place orders.",
+    "order_form_start": "📝 Order brief '{title}'. Answer one message at a time.\n/cancel — abort.",
+    "order_form_cancelled": "❌ Order creation cancelled.",
+    "order_published": "✅ Your order #{order_id} is published. Waiting for a creator to take it.",
+    "order_category_unavailable": "⚠️ Category temporarily unavailable (topic not configured). Try later.",
+    "tender_card": "🆕 <b>New order</b> · {title} · #{order_id}\nFrom: {contact}\n\n{body}",
+    "btn_take_order": "✅ Take order",
+    "order_taken_ok": "You took order #{order_id}. Waiting for client confirmation.",
+    "order_already_taken": "The order was already taken by another creator.",
+    "order_take_only_creator": "Only approved creators can take orders.",
+    "tender_taken_mark": "\n\n🔒 Taken by {contact}",
+    "client_creator_took": (
+        "🙌 Creator {contact} took your order #{order_id}.\n"
+        "Approve them and proceed to payment?"
+    ),
+    "btn_confirm_creator": "✅ Approve",
+    "btn_cancel_order": "❌ Cancel order",
+    "client_pay_instructions": (
+        "💳 Order #{order_id} confirmed.\n\n"
+        "Pay <b>50% prepayment</b> to:\n{details}\n\n"
+        "After payment the admin confirms it and you get the creator's contact."
+    ),
+    "admin_await_prepay": (
+        "💰 <b>Order #{order_id}</b> ({title})\n"
+        "Client: {client} · Creator: {creator}\n"
+        "Client approved the creator. Awaiting 50% prepayment."
+    ),
+    "btn_confirm_prepay": "✅ Confirm prepayment",
+    "btn_confirm_final": "✅ Confirm final payment",
+    "contacts_to_creator": "🤝 Prepayment for order #{order_id} received!\nClient contact: {contact}\nGet in touch and start.",
+    "contacts_to_client": "🤝 Prepayment received!\nCreator contact: {contact}\nThey will reach out.",
+    "admin_prepay_done": "Prepayment marked, contacts sent.",
+    "admin_enter_payout": "Enter the payout amount for the creator on order #{order_id} (number):",
+    "admin_payout_invalid": "Enter the amount as a number.",
+    "admin_final_done": "Order #{order_id} closed, credited {amount} ₽.",
+    "creator_balance_credited": "💵 For order #{order_id} you were credited {amount} ₽ (available for payout).",
+    "client_order_completed": "🎉 Order #{order_id} completed. Thank you!",
+    "order_cancelled_client": "Order #{order_id} cancelled.",
+    "admin_order_cancelled": "⚠️ Client cancelled order #{order_id}. Returned to moderation.",
 }

@@ -108,4 +108,44 @@ TEXTS = {
         "Клиент: {contact}\nАвтор: {author}\n"
         "Аренда: {rent} ₽ | Выкуп: {buy} ₽"
     ),
+    # --- Биржа заказов ---
+    "order_only_client": "⛔ Оформлять заказы могут только клиенты.",
+    "order_form_start": "📝 Оформление ТЗ «{title}». Отвечайте по одному сообщению.\n/cancel — отмена.",
+    "order_form_cancelled": "❌ Оформление отменено.",
+    "order_published": "✅ Ваш заказ #{order_id} опубликован. Ждём, пока исполнитель возьмёт его в работу.",
+    "order_category_unavailable": "⚠️ Категория временно недоступна (не настроен топик). Попробуйте позже.",
+    "tender_card": "🆕 <b>Новый заказ</b> · {title} · #{order_id}\nОт: {contact}\n\n{body}",
+    "btn_take_order": "✅ Взять заказ",
+    "order_taken_ok": "Вы взяли заказ #{order_id}. Ждём подтверждения клиента.",
+    "order_already_taken": "Заказ уже взят другим исполнителем.",
+    "order_take_only_creator": "Брать заказы могут только одобренные исполнители.",
+    "tender_taken_mark": "\n\n🔒 Взят исполнителем {contact}",
+    "client_creator_took": (
+        "🙌 Исполнитель {contact} взял ваш заказ #{order_id}.\n"
+        "Утвердить его и перейти к оплате?"
+    ),
+    "btn_confirm_creator": "✅ Утвердить",
+    "btn_cancel_order": "❌ Отменить заказ",
+    "client_pay_instructions": (
+        "💳 Заказ #{order_id} подтверждён.\n\n"
+        "Внесите <b>50% предоплаты</b> по реквизитам:\n{details}\n\n"
+        "После оплаты админ подтвердит платёж, и вы получите контакт исполнителя."
+    ),
+    "admin_await_prepay": (
+        "💰 <b>Заказ #{order_id}</b> ({title})\n"
+        "Клиент: {client} · Исполнитель: {creator}\n"
+        "Клиент утвердил исполнителя. Ожидается предоплата 50%."
+    ),
+    "btn_confirm_prepay": "✅ Подтвердить предоплату",
+    "btn_confirm_final": "✅ Подтвердить финальную оплату",
+    "contacts_to_creator": "🤝 Предоплата по заказу #{order_id} получена!\nКонтакт клиента: {contact}\nСвяжитесь и приступайте.",
+    "contacts_to_client": "🤝 Предоплата получена!\nКонтакт исполнителя: {contact}\nОн свяжется с вами.",
+    "admin_prepay_done": "Предоплата отмечена, контакты отправлены.",
+    "admin_enter_payout": "Введите сумму к начислению исполнителю по заказу #{order_id} (число):",
+    "admin_payout_invalid": "Введите сумму числом.",
+    "admin_final_done": "Заказ #{order_id} закрыт, начислено {amount} ₽.",
+    "creator_balance_credited": "💵 По заказу #{order_id} вам начислено {amount} ₽ (доступно к выводу).",
+    "client_order_completed": "🎉 Заказ #{order_id} завершён. Спасибо!",
+    "order_cancelled_client": "Заказ #{order_id} отменён.",
+    "admin_order_cancelled": "⚠️ Клиент отменил заказ #{order_id}. Возвращён на модерацию.",
 }

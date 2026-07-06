@@ -4,7 +4,9 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import User
+from bot.forms import MENU_TO_CODE
 from bot.handlers.beats import open_catalog
+from bot.handlers.orders import start_order
 from bot.locales import t
 
 router = Router()
@@ -36,6 +38,12 @@ async def menu_router(
     if text == t("menu_ready_beats", user.lang):
         await open_catalog(message, state, session, user)
         return
+
+    # Услуги на заказ — запуск формы ТЗ
+    for menu_key, code in MENU_TO_CODE.items():
+        if text == t(menu_key, user.lang):
+            await start_order(message, state, session, user, code)
+            return
 
     for key in _MENU_KEYS:
         if text == t(key, user.lang):
