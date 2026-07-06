@@ -15,16 +15,10 @@ class Settings(BaseSettings):
     group_id: int = Field(default=0, alias="GROUP_ID")
     moderation_thread_id: int = Field(default=0, alias="MODERATION_THREAD_ID")
 
-    # Топики категорий-тендеров (в той же супергруппе GROUP_ID)
-    thread_custom_beats: int = Field(default=0, alias="CUSTOM_BEATS_THREAD_ID")
-    thread_mixing: int = Field(default=0, alias="MIXING_THREAD_ID")
-    thread_ghostwriting: int = Field(default=0, alias="GHOSTWRITING_THREAD_ID")
-    thread_visual: int = Field(default=0, alias="VISUAL_THREAD_ID")
-    thread_videographer: int = Field(default=0, alias="VIDEOGRAPHER_THREAD_ID")
-    thread_editing: int = Field(default=0, alias="EDITING_THREAD_ID")
-    thread_photo: int = Field(default=0, alias="PHOTO_THREAD_ID")
+    # thread_id топиков категорий читаются из окружения (<CODE>_THREAD_ID)
+    # в bot/categories.py — здесь дублировать не нужно.
 
-    # Реквизиты для оплаты (показываются клиенту) и комиссия по умолчанию
+    # Реквизиты для оплаты (показываются клиенту)
     payment_details: str = Field(default="", alias="PAYMENT_DETAILS")
 
     # Reviews
@@ -59,19 +53,6 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
-
-    @property
-    def category_threads(self) -> dict[str, int]:
-        """code категории -> thread_id (для проставления в БД сидом)."""
-        return {
-            "custom_beats": self.thread_custom_beats,
-            "mixing": self.thread_mixing,
-            "ghostwriting": self.thread_ghostwriting,
-            "visual": self.thread_visual,
-            "videographer": self.thread_videographer,
-            "editing": self.thread_editing,
-            "photo": self.thread_photo,
-        }
 
 
 @lru_cache

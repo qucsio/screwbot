@@ -17,9 +17,9 @@ from bot.db.models import (
     Role,
     User,
 )
+from bot.categories import by_code
 from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_category_by_code, get_approved_creator
-from bot.forms import FORMS
 from bot.keyboards.orders import (
     admin_final_keyboard,
     admin_prepay_keyboard,
@@ -78,7 +78,7 @@ async def start_order(message: Message, state: FSMContext, session: AsyncSession
     await state.update_data(code=code, step=0, brief={})
     title = category.title_en if user.lang == Lang.en else category.title_ru
     await message.answer(t("order_form_start", user.lang, title=title))
-    await message.answer(FORMS[code][0].prompt(user.lang))
+    await message.answer(by_code(code).fields[0].prompt(user.lang))
 
 
 @router.message(OrderForm.filling, Command("cancel"))
@@ -93,7 +93,7 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
     code = data["code"]
     step = data["step"]
     brief = data["brief"]
-    fields = FORMS[code]
+    fields = by_code(code).fields
 
     brief[fields[step].key] = (message.text or "").strip()
     step += 1
@@ -120,7 +120,7 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
 
 
 async def _publish_tender(bot: Bot, session: AsyncSession, order: Order, category: Category, client: User):
-    fields = FORMS[category.code]
+    fields = by_code(category.code).fields
     body = "\n".join(f"• {f.label}: {order.brief.get(f.key, '—')}" for f in fields)
     text = t(
         "tender_card", Lang.ru,

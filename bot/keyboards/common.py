@@ -30,20 +30,13 @@ def role_keyboard(lang: Lang) -> InlineKeyboardMarkup:
 
 
 def main_menu(lang: Lang) -> ReplyKeyboardMarkup:
-    keys = [
-        "menu_ready_beats",
-        "menu_custom_beats",
-        "menu_mixing",
-        "menu_ghostwriting",
-        "menu_visual",
-        "menu_videographer",
-        "menu_editing",
-        "menu_photo",
-        "menu_reviews",
-    ]
+    from bot.categories import CATEGORIES
+
+    # кнопки категорий из реестра + «Отзывы» в конце
+    titles = [c.title(lang) for c in CATEGORIES] + [t("menu_reviews", lang)]
     rows, row = [], []
-    for i, k in enumerate(keys, 1):
-        row.append(KeyboardButton(text=t(k, lang)))
+    for i, title in enumerate(titles, 1):
+        row.append(KeyboardButton(text=title))
         if i % 2 == 0:
             rows.append(row)
             row = []
