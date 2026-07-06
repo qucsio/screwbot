@@ -183,4 +183,58 @@ TEXTS = {
     "status_pending": "⏳ на модерации",
     "status_approved": "✅ в каталоге",
     "status_rejected": "❌ отклонена",
+    # --- Админ-панель ---
+    "admin_root": "🛠 <b>Админ-панель SCREW PROD</b>",
+    "adm_btn_creators": "👥 Исполнители",
+    "adm_btn_works": "🎵 Каталог работ",
+    "adm_btn_add_creator": "➕ Добавить исполнителя",
+    "adm_creators_title": "👥 Исполнители (нажмите для управления):",
+    "adm_creators_empty": "Исполнителей пока нет.",
+    "adm_creator_card": (
+        "👤 <b>Исполнитель #{cid}</b>\n"
+        "Контакт: {contact}\n"
+        "Ник: {nickname}\n"
+        "Услуга: {service}\n"
+        "Статус: {status}\n"
+        "💵 Баланс: <b>{balance} ₽</b>"
+    ),
+    "cstatus_pending": "⏳ на модерации",
+    "cstatus_approved": "✅ активен",
+    "cstatus_blocked": "🚫 заблокирован",
+    "adm_btn_writeoff": "💸 Списать баланс",
+    "adm_btn_block": "🚫 Заблокировать",
+    "adm_btn_unblock": "✅ Разблокировать",
+    "adm_btn_del_creator": "🗑 Удалить",
+    "adm_ask_writeoff": "Введите сумму списания с баланса (число):",
+    "adm_writeoff_invalid": "Введите сумму числом.",
+    "adm_writeoff_done": "✅ Списано {amount} ₽. Новый баланс: {balance} ₽.",
+    "adm_creator_blocked": "🚫 Исполнитель заблокирован (работы скрыты из каталога).",
+    "adm_creator_unblocked": "✅ Исполнитель разблокирован.",
+    "adm_creator_deleted": "🗑 Исполнитель удалён вместе с работами.",
+    "adm_ask_add_creator": "Пришлите @username или tg_id пользователя (он должен был запускать бота):",
+    "adm_user_not_found": "❌ Пользователь не найден. Он должен сначала нажать /start в боте.",
+    "adm_creator_added": "✅ {contact} добавлен как исполнитель.",
+    "adm_works_title": "🎵 Последние работы (нажмите для правки):",
+    "adm_works_empty": "Работ пока нет.",
+    "adm_work_card": (
+        "🎵 <b>{title}</b> (#{wid})\n"
+        "Автор: {author}\n"
+        "Жанр: {genre} | Тон: {key} | BPM: {bpm}\n"
+        "💸 Аренда: {rent} ₽ | 💰 Выкуп: {buy} ₽\n"
+        "Статус: {status}"
+    ),
+    "adm_btn_edit_genre": "Жанр",
+    "adm_btn_edit_key": "Тон",
+    "adm_btn_edit_bpm": "BPM",
+    "adm_btn_edit_rent": "Аренда",
+    "adm_btn_edit_buy": "Выкуп",
+    "adm_btn_edit_audio": "🔊 Аудио",
+    "adm_btn_del_work": "🗑 Удалить работу",
+    "adm_ask_value": "Введите новое значение:",
+    "adm_ask_bpm": "Введите BPM (число):",
+    "adm_ask_price": "Введите цену (число):",
+    "adm_ask_audio": "Пришлите новый аудиофайл:",
+    "adm_value_invalid": "Некорректное значение, введите число.",
+    "adm_work_updated": "✅ Обновлено.",
+    "adm_work_deleted": "🗑 Работа удалена.",
 }

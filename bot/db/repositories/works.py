@@ -1,7 +1,14 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Category, Creator, ModerationStatus, User, Work
+from bot.db.models import (
+    Category,
+    Creator,
+    CreatorStatus,
+    ModerationStatus,
+    User,
+    Work,
+)
 
 
 async def get_category_by_code(session: AsyncSession, code: str) -> Category | None:
@@ -24,9 +31,11 @@ async def get_approved_creator(session: AsyncSession, user_id: int) -> Creator |
 async def approved_beat_genres(session: AsyncSession, category_id: int) -> list[str]:
     res = await session.execute(
         select(Work.genre)
+        .join(Creator, Creator.id == Work.creator_id)
         .where(
             Work.category_id == category_id,
             Work.moderation_status == ModerationStatus.approved,
+            Creator.status == CreatorStatus.approved,
             Work.genre.is_not(None),
         )
         .distinct()
@@ -43,9 +52,14 @@ async def filter_beats(
     bpm_max: int | None = None,
 ) -> list[int]:
     """Возвращает id одобренных битов под фильтр, новые сверху."""
-    q = select(Work.id).where(
-        Work.category_id == category_id,
-        Work.moderation_status == ModerationStatus.approved,
+    q = (
+        select(Work.id)
+        .join(Creator, Creator.id == Work.creator_id)
+        .where(
+            Work.category_id == category_id,
+            Work.moderation_status == ModerationStatus.approved,
+            Creator.status == CreatorStatus.approved,
+        )
     )
     if genre:
         q = q.where(Work.genre == genre)
@@ -86,3 +100,42 @@ async def get_work_with_author(
     )
     row = res.first()
     return (row[0], row[1]) if row else None
+
+
+# --- Админские выборки ---------------------------------------------------
+
+
+async def list_creators(session: AsyncSession) -> list[tuple[Creator, User]]:
+    res = await session.execute(
+        select(Creator, User)
+        .join(User, User.id == Creator.user_id)
+        .order_by(Creator.id.desc())
+    )
+    return [(r[0], r[1]) for r in res.all()]
+
+
+async def get_creator_full(session: AsyncSession, creator_id: int) -> tuple[Creator, User] | None:
+    res = await session.execute(
+        select(Creator, User).join(User, User.id == Creator.user_id).where(Creator.id == creator_id)
+    )
+    row = res.first()
+    return (row[0], row[1]) if row else None
+
+
+async def find_user_by_query(session: AsyncSession, query: str) -> User | None:
+    """Поиск пользователя по @username или числовому tg_id."""
+    q = query.strip().lstrip("@")
+    if q.isdigit():
+        res = await session.execute(select(User).where(User.tg_id == int(q)))
+    else:
+        res = await session.execute(select(User).where(User.username.ilike(q)))
+    return res.scalar_one_or_none()
+
+
+async def list_recent_works(session: AsyncSession, limit: int = 30) -> list[Work]:
+    res = await session.execute(select(Work).order_by(Work.id.desc()).limit(limit))
+    return list(res.scalars().all())
+
+
+async def get_work(session: AsyncSession, work_id: int) -> Work | None:
+    return await session.get(Work, work_id)
