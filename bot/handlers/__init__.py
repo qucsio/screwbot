@@ -1,7 +1,7 @@
 from aiogram import Router
 
 from bot.config import get_settings
-from bot.handlers import start, menu, moderation, beats, orders, profile, admin, debug
+from bot.handlers import start, menu, moderation, beats, orders, profile, admin, reviews, debug
 
 
 def setup_routers() -> Router:
@@ -14,5 +14,6 @@ def setup_routers() -> Router:
     router.include_router(beats.router)
     router.include_router(orders.router)
     router.include_router(profile.router)
+    router.include_router(reviews.router)
     router.include_router(menu.router)  # menu — последним: ловит остальной текст
     return router

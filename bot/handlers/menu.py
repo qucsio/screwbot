@@ -7,6 +7,7 @@ from bot.categories import CATEGORIES
 from bot.db.models import User
 from bot.handlers.beats import open_catalog
 from bot.handlers.orders import start_order
+from bot.handlers.reviews import open_reviews
 from bot.locales import t
 
 router = Router()
@@ -31,6 +32,6 @@ async def menu_router(
                 await message.answer(f"{text}\n\n{t('wip', user.lang)}")
             return
 
-    # «Отзывы» и прочее — пока заглушка
+    # «Отзывы»
     if text == t("menu_reviews", user.lang):
-        await message.answer(f"{text}\n\n{t('wip', user.lang)}")
+        await open_reviews(message, state, session, user)

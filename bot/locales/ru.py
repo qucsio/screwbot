@@ -237,4 +237,17 @@ TEXTS = {
     "adm_value_invalid": "Некорректное значение, введите число.",
     "adm_work_updated": "✅ Обновлено.",
     "adm_work_deleted": "🗑 Работа удалена.",
+    # --- Отзывы ---
+    "review_only_creator": "⛔ Загружать отзывы могут только одобренные исполнители.",
+    "review_ask_photo": "Пришлите скриншот отзыва/переписки с довольным клиентом (фото):",
+    "review_not_photo": "Нужно фото. Пришлите скриншот изображением.",
+    "review_saved": "✅ Спасибо! Отзыв опубликован в канале SCREW PROD.",
+    "review_saved_no_channel": "✅ Отзыв сохранён (канал-зеркало не настроен).",
+    "reviews_intro": "💬 <b>Отзывы SCREW PROD</b>\nКанал-зеркало: {url}",
+    "reviews_empty": "💬 Отзывов пока нет.\nКанал-зеркало: {url}",
+    "review_card": "💬 Отзыв {pos}/{total}",
+    "btn_reviews_channel": "📢 Открыть канал отзывов",
+    "review_prev": "⬅️",
+    "review_next": "➡️",
+    "review_upload_hint": "\n📸 Не забудьте загрузить отзыв: /review",
 }

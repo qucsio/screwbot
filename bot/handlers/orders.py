@@ -301,7 +301,8 @@ async def admin_payout(message: Message, state: FSMContext, session: AsyncSessio
         await session.commit()
         await bot.send_message(
             creator_user.tg_id,
-            t("creator_balance_credited", creator_user.lang, order_id=order_id, amount=amount),
+            t("creator_balance_credited", creator_user.lang, order_id=order_id, amount=amount)
+            + t("review_upload_hint", creator_user.lang),
         )
     else:
         await session.commit()
