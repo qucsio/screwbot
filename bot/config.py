@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Форматы: socks5://user:pass@host:port  или  http://host:port. Пусто = напрямую.
     telegram_proxy: str = Field(default="", alias="TELEGRAM_PROXY")
 
+    # Дебаг: бот отвечает chat.id / thread_id на сообщения в группах (для настройки).
+    debug_ids: bool = Field(default=False, alias="DEBUG_IDS")
+
     # Postgres
     postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
