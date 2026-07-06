@@ -1,0 +1,106 @@
+TEXTS = {
+    "choose_lang": "🌐 Choose your language / Выберите язык:",
+    "lang_set": "Language set: English 🇬🇧",
+    "choose_role": "Who are you on the SCREW PROD platform?",
+    "role_client": "🎧 Client",
+    "role_creator": "🎨 Creator",
+    "ask_nickname": "Enter your nickname in the system:",
+    "no_username": (
+        "⚠️ You have no @username set in Telegram. "
+        "It's required for contact. Set it in settings and press /start again."
+    ),
+    "client_registered": (
+        "✅ Done, {nickname}! You are registered as a client.\n"
+        "Opening the services menu."
+    ),
+    "creator_ask_service": "What service do you provide? (e.g. 'Producer / beats')",
+    "creator_ask_experience": "Tell us about your experience (briefly):",
+    "creator_ask_portfolio": "Send your portfolio / social links in one message:",
+    "creator_application_sent": (
+        "✅ Application sent for moderation. "
+        "The admin will contact you in direct messages."
+    ),
+    "creator_already_pending": "⏳ Your application is already under review.",
+    "main_menu": "🎛 SCREW PROD services menu:",
+    "menu_ready_beats": "🎧 Ready arrangements & beats",
+    "menu_custom_beats": "🎶 Custom arrangements & beats",
+    "menu_mixing": "🎚️ Mixing",
+    "menu_ghostwriting": "✍️ Lyrics (ghostwriter)",
+    "menu_visual": "🖼️ Visuals",
+    "menu_videographer": "🎥 Videographer",
+    "menu_editing": "🎬 Video editing",
+    "menu_photo": "📸 Photoshoot (Moscow)",
+    "menu_reviews": "💬 Reviews",
+    "back": "⬅️ Back",
+    "wip": "🚧 Section under construction.",
+    "mod_new_creator": (
+        "🆕 <b>Creator application</b>\n\n"
+        "Contact: {contact}\n"
+        "Nickname: {nickname}\n"
+        "Service: {service}\n"
+        "Experience: {experience}\n"
+        "Portfolio: {portfolio}"
+    ),
+    "mod_approve": "✅ Approve",
+    "mod_reject": "❌ Reject",
+    "mod_approved_admin": "Creator approved.",
+    "mod_rejected_admin": "Application rejected.",
+    "creator_approved_notify": "🎉 Your application is approved! Welcome to the SCREW PROD team.",
+    "creator_rejected_notify": "Unfortunately, your application was rejected.",
+    "addbeat_only_creator": "⛔ Only approved creators can add beats.",
+    "addbeat_title": "🎵 Beat title:",
+    "addbeat_genre": "Genre:",
+    "addbeat_key": "Key (e.g. Am, C#):",
+    "addbeat_bpm": "BPM (number):",
+    "addbeat_bpm_invalid": "Enter BPM as a number (e.g. 140).",
+    "addbeat_cover": "Send the cover (photo):",
+    "addbeat_cover_invalid": "A photo is required. Send the cover as an image.",
+    "addbeat_audio": "Send the audio snippet (audio/file):",
+    "addbeat_audio_invalid": "An audio file is required.",
+    "addbeat_price_rent": "💸 Rent price (RUB):",
+    "addbeat_price_buy": "💰 Buyout price (RUB):",
+    "addbeat_price_invalid": "Enter the price as a number.",
+    "addbeat_sent": "✅ Beat sent for moderation.",
+    "mod_new_beat": (
+        "🆕 <b>New beat for moderation</b>\n\n"
+        "Author: {author}\n"
+        "Title: {title}\n"
+        "Genre: {genre} | Key: {key} | BPM: {bpm}\n"
+        "Rent: {rent} ₽ | Buyout: {buy} ₽"
+    ),
+    "beat_approved_notify": "✅ Your beat '{title}' is approved and added to the catalog.",
+    "beat_rejected_notify": "❌ Your beat '{title}' was rejected by moderation.",
+    "catalog_empty": "😔 No approved beats in the catalog yet.",
+    "filter_intro": "🔎 Set up a filter or browse everything:",
+    "filter_all": "▶️ Browse all",
+    "filter_setup": "🎚 Set up filter",
+    "filter_genre": "Choose a genre:",
+    "filter_any": "Any",
+    "filter_key": "Key (as text) or '-' to skip:",
+    "filter_bpm": "BPM range as '120-140' or '-' to skip:",
+    "filter_no_results": "😔 Nothing matched your filter.",
+    "beat_card": (
+        "🎵 <b>{title}</b>\n"
+        "Author: {author}\n"
+        "Genre: {genre} | Key: {key} | BPM: {bpm}\n"
+        "💸 Rent: {rent} ₽ | 💰 Buyout: {buy} ₽\n"
+        "({pos}/{total})"
+    ),
+    "beat_prev": "⬅️",
+    "beat_next": "➡️",
+    "beat_listen": "▶️ Listen",
+    "beat_buy": "💸 Buy",
+    "beat_ask": "💬 Ask a question",
+    "beat_ask_prompt": "✍️ Write your question about '{title}' — it will go to the admin:",
+    "beat_ask_sent": "✅ Question sent.",
+    "beat_buy_sent": "✅ Purchase request sent to the admin, he will contact you.",
+    "mod_beat_question": (
+        "💬 <b>Question about beat</b> '{title}' (id{work_id})\n"
+        "From: {contact}\n\n{text}"
+    ),
+    "mod_beat_buy": (
+        "🛒 <b>Purchase request</b> for beat '{title}' (id{work_id})\n"
+        "Client: {contact}\nAuthor: {author}\n"
+        "Rent: {rent} ₽ | Buyout: {buy} ₽"
+    ),
+}
