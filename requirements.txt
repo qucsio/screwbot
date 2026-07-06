@@ -5,3 +5,4 @@ alembic==1.13.3
 redis==5.1.1
 pydantic==2.9.2
 pydantic-settings==2.5.2
+aiohttp-socks==0.10.1

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     reviews_channel_id: int = Field(default=0, alias="REVIEWS_CHANNEL_ID")
     reviews_channel_url: str = Field(default="", alias="REVIEWS_CHANNEL_URL")
 
+    # Прокси до Telegram API (если api.telegram.org заблокирован).
+    # Форматы: socks5://user:pass@host:port  или  http://host:port. Пусто = напрямую.
+    telegram_proxy: str = Field(default="", alias="TELEGRAM_PROXY")
+
     # Postgres
     postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")

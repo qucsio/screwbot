@@ -3,6 +3,7 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
@@ -20,8 +21,14 @@ logging.basicConfig(
 async def main() -> None:
     settings = get_settings()
 
+    session = None
+    if settings.telegram_proxy:
+        logging.info("Using proxy for Telegram API")
+        session = AiohttpSession(proxy=settings.telegram_proxy)
+
     bot = Bot(
         token=settings.bot_token,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
 
