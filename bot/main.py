@@ -18,8 +18,23 @@ logging.basicConfig(
 )
 
 
+def _validate_config() -> None:
+    """Предупреждает о незаполненном прикладном конфиге (не падает)."""
+    from bot import app_config
+    from bot.categories import custom_categories
+
+    if not app_config.ADMIN_ID:
+        logging.warning("app_config.ADMIN_ID не задан — админ-панель недоступна")
+    if not app_config.GROUP_ID:
+        logging.warning("app_config.GROUP_ID не задан — тендеры/модерация уйдут в личку админу")
+    missing = [c.code for c in custom_categories() if not c.thread_id]
+    if missing:
+        logging.warning("Категории без thread_id (заказы недоступны): %s", ", ".join(missing))
+
+
 async def main() -> None:
     settings = get_settings()
+    _validate_config()
 
     session = None
     if settings.telegram_proxy:

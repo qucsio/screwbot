@@ -4,7 +4,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
 from bot.db.models import Creator, CreatorStatus, Lang, Role, User
 from bot.keyboards.common import (
     lang_keyboard,
@@ -17,7 +16,6 @@ from bot.services.notify import send_to_moderation
 from bot.states.registration import CreatorApplication, Registration
 
 router = Router()
-settings = get_settings()
 
 
 @router.message(CommandStart())

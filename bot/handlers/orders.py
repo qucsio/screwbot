@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
+from bot import app_config
 from bot.db.models import (
     Category,
     Creator,
@@ -32,7 +32,6 @@ from bot.services.notify import notify_admin, send_to_moderation
 from bot.states.orders import AdminPayout, OrderForm
 
 router = Router()
-settings = get_settings()
 
 
 def _contact(user: User) -> str:
@@ -69,7 +68,7 @@ async def start_order(message: Message, state: FSMContext, session: AsyncSession
         await message.answer(t("order_only_client", user.lang))
         return
     category = await get_category_by_code(session, code)
-    if category is None or not category.thread_id or not settings.group_id:
+    if category is None or not category.thread_id or not app_config.GROUP_ID:
         await message.answer(t("order_category_unavailable", user.lang))
         return
 
@@ -128,7 +127,7 @@ async def _publish_tender(bot: Bot, session: AsyncSession, order: Order, categor
         contact=_contact(client), body=body,
     )
     sent = await bot.send_message(
-        settings.group_id,
+        app_config.GROUP_ID,
         text,
         message_thread_id=category.thread_id,
         reply_markup=take_order_keyboard(Lang.ru, order.id),
@@ -194,7 +193,7 @@ async def client_confirm(call: CallbackQuery, session: AsyncSession, user: User,
 
     # инструкции по оплате клиенту
     await call.message.edit_text(
-        t("client_pay_instructions", user.lang, order_id=order_id, details=settings.payment_details)
+        t("client_pay_instructions", user.lang, order_id=order_id, details=app_config.PAYMENT_DETAILS)
     )
 
     # карточка админу с кнопкой подтверждения предоплаты
@@ -233,7 +232,7 @@ async def client_cancel(call: CallbackQuery, session: AsyncSession, user: User, 
 
 @router.callback_query(F.data.startswith("ordadmin:prepay:"))
 async def admin_prepay(call: CallbackQuery, session: AsyncSession, bot: Bot):
-    if call.from_user.id != settings.admin_id:
+    if call.from_user.id != app_config.ADMIN_ID:
         await call.answer()
         return
     order_id = int(call.data.split(":")[2])
@@ -267,7 +266,7 @@ async def admin_prepay(call: CallbackQuery, session: AsyncSession, bot: Bot):
 
 @router.callback_query(F.data.startswith("ordadmin:final:"))
 async def admin_final(call: CallbackQuery, state: FSMContext, bot: Bot):
-    if call.from_user.id != settings.admin_id:
+    if call.from_user.id != app_config.ADMIN_ID:
         await call.answer()
         return
     order_id = int(call.data.split(":")[2])
@@ -279,7 +278,7 @@ async def admin_final(call: CallbackQuery, state: FSMContext, bot: Bot):
 
 @router.message(AdminPayout.amount)
 async def admin_payout(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
-    if message.from_user.id != settings.admin_id:
+    if message.from_user.id != app_config.ADMIN_ID:
         return
     raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
     try:

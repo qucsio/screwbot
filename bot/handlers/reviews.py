@@ -10,7 +10,7 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
+from bot import app_config
 from bot.db.models import Lang, User
 from bot.db.repositories import reviews as repo
 from bot.db.repositories.works import get_approved_creator
@@ -18,7 +18,6 @@ from bot.locales import t
 from bot.states.reviews import ReviewUpload
 
 router = Router()
-settings = get_settings()
 
 
 def _carousel_keyboard(lang: Lang) -> InlineKeyboardMarkup:
@@ -26,8 +25,8 @@ def _carousel_keyboard(lang: Lang) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text=t("review_prev", lang), callback_data="revnav:prev"),
         InlineKeyboardButton(text=t("review_next", lang), callback_data="revnav:next"),
     ]]
-    if settings.reviews_channel_url:
-        rows.append([InlineKeyboardButton(text=t("btn_reviews_channel", lang), url=settings.reviews_channel_url)])
+    if app_config.REVIEWS_CHANNEL_URL:
+        rows.append([InlineKeyboardButton(text=t("btn_reviews_channel", lang), url=app_config.REVIEWS_CHANNEL_URL)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -60,9 +59,9 @@ async def review_photo(message: Message, state: FSMContext, session: AsyncSessio
     await state.clear()
 
     # зеркалим в публичный канал
-    if settings.reviews_channel_id:
+    if app_config.REVIEWS_CHANNEL_ID:
         try:
-            await bot.send_photo(settings.reviews_channel_id, file_id)
+            await bot.send_photo(app_config.REVIEWS_CHANNEL_ID, file_id)
             await message.answer(t("review_saved", user.lang))
             return
         except Exception:
@@ -83,11 +82,11 @@ async def review_not_photo(message: Message, user: User):
 async def open_reviews(message: Message, state: FSMContext, session: AsyncSession, user: User):
     photos = await repo.last_reviews(session, limit=10)
     if not photos:
-        await message.answer(t("reviews_empty", user.lang, url=settings.reviews_channel_url or "—"))
+        await message.answer(t("reviews_empty", user.lang, url=app_config.REVIEWS_CHANNEL_URL or "—"))
         return
     await state.clear()
     await state.update_data(rev_ids=photos, rev_idx=0)
-    await message.answer(t("reviews_intro", user.lang, url=settings.reviews_channel_url or "—"))
+    await message.answer(t("reviews_intro", user.lang, url=app_config.REVIEWS_CHANNEL_URL or "—"))
     await message.answer_photo(
         photos[0],
         caption=t("review_card", user.lang, pos=1, total=len(photos)),

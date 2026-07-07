@@ -1,9 +1,7 @@
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup
 
-from bot.config import get_settings
-
-settings = get_settings()
+from bot import app_config
 
 
 async def send_to_moderation(
@@ -12,17 +10,17 @@ async def send_to_moderation(
     markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     """Постит в топик модерации супергруппы; фолбэк — в личку админу."""
-    if settings.group_id and settings.moderation_thread_id:
+    if app_config.GROUP_ID and app_config.MODERATION_THREAD_ID:
         await bot.send_message(
-            settings.group_id,
+            app_config.GROUP_ID,
             text,
-            message_thread_id=settings.moderation_thread_id,
+            message_thread_id=app_config.MODERATION_THREAD_ID,
             reply_markup=markup,
         )
     else:
-        await bot.send_message(settings.admin_id, text, reply_markup=markup)
+        await bot.send_message(app_config.ADMIN_ID, text, reply_markup=markup)
 
 
 async def notify_admin(bot: Bot, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
     """Личное уведомление админу (вопросы/заявки на покупку)."""
-    await bot.send_message(settings.admin_id, text, reply_markup=markup)
+    await bot.send_message(app_config.ADMIN_ID, text, reply_markup=markup)

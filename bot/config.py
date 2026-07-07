@@ -1,3 +1,8 @@
+"""Секреты и инфраструктура — читаются из .env (не коммитятся).
+
+Здесь ТОЛЬКО то, что секретно или зависит от хоста: токен бота, креды БД,
+адрес Redis, прокси. Стабильные не-секретные id — в bot/app_config.py.
+"""
 from functools import lru_cache
 
 from pydantic import Field
@@ -9,27 +14,11 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # Telegram
+    # Секрет
     bot_token: str = Field(alias="BOT_TOKEN")
-    admin_id: int = Field(alias="ADMIN_ID")
-    group_id: int = Field(default=0, alias="GROUP_ID")
-    moderation_thread_id: int = Field(default=0, alias="MODERATION_THREAD_ID")
 
-    # thread_id топиков категорий читаются из окружения (<CODE>_THREAD_ID)
-    # в bot/categories.py — здесь дублировать не нужно.
-
-    # Реквизиты для оплаты (показываются клиенту)
-    payment_details: str = Field(default="", alias="PAYMENT_DETAILS")
-
-    # Reviews
-    reviews_channel_id: int = Field(default=0, alias="REVIEWS_CHANNEL_ID")
-    reviews_channel_url: str = Field(default="", alias="REVIEWS_CHANNEL_URL")
-
-    # Прокси до Telegram API (если api.telegram.org заблокирован).
-    # Форматы: socks5://user:pass@host:port  или  http://host:port. Пусто = напрямую.
+    # Инфраструктура / хост-специфично
     telegram_proxy: str = Field(default="", alias="TELEGRAM_PROXY")
-
-    # Дебаг: бот отвечает chat.id / thread_id на сообщения в группах (для настройки).
     debug_ids: bool = Field(default=False, alias="DEBUG_IDS")
 
     # Postgres

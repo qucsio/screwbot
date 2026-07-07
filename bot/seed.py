@@ -1,7 +1,7 @@
 """Идемпотентный сид категорий из единого реестра bot/categories.py.
 
 Запуск: python -m bot.seed
-thread_id берутся из окружения (<CODE>_THREAD_ID) через CategoryDef.thread_id.
+thread_id берутся из CategoryDef.thread_id (bot/categories.py).
 """
 import asyncio
 

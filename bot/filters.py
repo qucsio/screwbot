@@ -1,7 +1,7 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message
 
-from bot.config import get_settings
+from bot import app_config
 
 
 class IsAdmin(BaseFilter):
@@ -9,4 +9,4 @@ class IsAdmin(BaseFilter):
 
     async def __call__(self, event: Message | CallbackQuery) -> bool:
         user = event.from_user
-        return user is not None and user.id == get_settings().admin_id
+        return user is not None and user.id == app_config.ADMIN_ID

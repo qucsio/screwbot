@@ -3,11 +3,13 @@
 Чтобы добавить новую услугу:
   1. добавь один CategoryDef в CATEGORIES ниже;
   2. если это услуга «на заказ» (kind="custom") — перечисли поля формы ТЗ;
-  3. если нужен топик-тендер — заведи топик и пропиши <CODE>_THREAD_ID в .env.
+  3. если нужен топик-тендер — заведи топик и впиши его id в thread_id.
 Больше ничего править не нужно: меню, сид, формы и роутинг строятся отсюда.
+
+thread_id — id топика в супергруппе (bot/app_config.GROUP_ID). Не секрет,
+стабилен между запусками, поэтому хранится прямо здесь.
 """
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from bot.db.models import Lang
 
@@ -30,22 +32,11 @@ class CategoryDef:
     ru: str                       # название кнопки/категории (RU)
     en: str                       # (EN)
     kind: str                     # "catalog" (готовые работы) | "custom" (заказ) | "static"
+    thread_id: int = 0            # id топика-тендера в супергруппе (0 = не задан)
     fields: tuple[Field, ...] = ()  # шаги ТЗ для kind="custom"
 
     def title(self, lang: Lang) -> str:
         return self.en if lang == Lang.en else self.ru
-
-    @property
-    def env_thread_key(self) -> str:
-        return f"{self.code.upper()}_THREAD_ID"
-
-    @property
-    def thread_id(self) -> int:
-        """thread_id топика из окружения (0 = не задан)."""
-        try:
-            return int(os.getenv(self.env_thread_key, "0") or "0")
-        except ValueError:
-            return 0
 
 
 # Порядок в списке = порядок кнопок в главном меню.
@@ -53,6 +44,7 @@ CATEGORIES: list[CategoryDef] = [
     CategoryDef("ready_beats", "🎧 Готовые аранжировки и биты", "🎧 Ready arrangements & beats", "catalog"),
     CategoryDef(
         "custom_beats", "🎶 Аранжировки и биты на заказ", "🎶 Custom arrangements & beats", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
             Field("bpm", "BPM:", "BPM:", "BPM"),
@@ -64,6 +56,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "mixing", "🎚️ Mixing", "🎚️ Mixing", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("tracks_count", "Количество дорожек:", "Number of tracks:", "Дорожек"),
             Field("ref_sound", "Референс звучания:", "Reference sound:", "Референс"),
@@ -74,6 +67,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "ghostwriting", "✍️ Текст (призрак-писатель)", "✍️ Lyrics (ghostwriter)", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
             Field("verses", "Кол-во куплетов/припевов:", "Verses/choruses count:", "Куплеты"),
@@ -85,6 +79,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "visual", "🖼️ Визуал", "🖼️ Visuals", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("type", "Тип (обложка, баннер, арт, 3D):", "Type (cover, banner, art, 3D):", "Тип"),
             Field("palette", "Цветовая палитра/стиль:", "Color palette/style:", "Палитра"),
@@ -96,6 +91,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "videographer", "🎥 Видеограф", "🎥 Videographer", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
             Field("idea", "Идея/сценарий:", "Idea/script:", "Идея"),
@@ -106,6 +102,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "editing", "🎬 Монтаж", "🎬 Video editing", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
             Field("duration", "Хронометраж:", "Duration:", "Хронометраж"),
@@ -117,6 +114,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "photo", "📸 Фото-сессия (Москва)", "📸 Photoshoot (Moscow)", "custom",
+        thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("city", "Город (строго Москва):", "City (Moscow only):", "Город"),
             Field("style", "Стиль съёмки:", "Shooting style:", "Стиль"),

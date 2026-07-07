@@ -2,12 +2,10 @@ from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
 from bot.db.models import Creator, CreatorStatus, Lang, User
 from bot.locales import t
 
 router = Router()
-settings = get_settings()
 
 
 @router.callback_query(F.data.startswith("modcreator:"))
