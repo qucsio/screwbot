@@ -35,7 +35,7 @@ def _profile_keyboard(lang) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=t("btn_edit_desc", lang), callback_data="prof:desc"),
             ],
             [InlineKeyboardButton(text=t("btn_my_works", lang), callback_data="prof:works")],
-            [InlineKeyboardButton(text=t("btn_add_beat", lang), callback_data="prof:addbeat")],
+            [InlineKeyboardButton(text=t("addwork_choose", lang), callback_data="prof:addwork")],
         ]
     )
 
@@ -78,9 +78,11 @@ async def profile_root(call: CallbackQuery, session: AsyncSession, user: User):
     await call.answer()
 
 
-@router.callback_query(F.data == "prof:addbeat")
-async def profile_addbeat(call: CallbackQuery, user: User):
-    await call.message.answer(t("add_beat_hint", user.lang))
+@router.callback_query(F.data == "prof:addwork")
+async def profile_addwork(call: CallbackQuery, session: AsyncSession, user: User):
+    from bot.handlers.beats import _add_work_keyboard
+
+    await call.message.answer(t("addwork_choose", user.lang), reply_markup=_add_work_keyboard(user.lang))
     await call.answer()
 
 

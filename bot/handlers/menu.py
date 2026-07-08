@@ -26,7 +26,7 @@ async def menu_router(
     for cat in CATEGORIES:
         if text in (cat.ru, cat.en):
             if cat.kind == "catalog":
-                await open_catalog(message, state, session, user)
+                await open_catalog(message, state, session, user, cat.code)
             elif cat.kind == "custom":
                 await start_order(message, state, session, user, cat.code)
             else:

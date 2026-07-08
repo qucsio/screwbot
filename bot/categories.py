@@ -34,6 +34,7 @@ class CategoryDef:
     kind: str                     # "catalog" (готовые работы) | "custom" (заказ) | "static"
     thread_id: int = 0            # id топика-тендера в супергруппе (0 = не задан)
     fields: tuple[Field, ...] = ()  # шаги ТЗ для kind="custom"
+    catalog_type: str = ""        # для kind="catalog": "beat" | "visual"
 
     def title(self, lang: Lang) -> str:
         return self.en if lang == Lang.en else self.ru
@@ -41,7 +42,8 @@ class CategoryDef:
 
 # Порядок в списке = порядок кнопок в главном меню.
 CATEGORIES: list[CategoryDef] = [
-    CategoryDef("ready_beats", "🎧 Готовые аранжировки и биты", "🎧 Ready arrangements & beats", "catalog"),
+    CategoryDef("ready_beats", "🎧 Готовые аранжировки и биты", "🎧 Ready arrangements & beats",
+                "catalog", catalog_type="beat"),
     CategoryDef(
         "custom_beats", "🎶 Аранжировки и биты на заказ", "🎶 Custom arrangements & beats", "custom",
         thread_id=0,  # ← id топика-тендера в супергруппе
@@ -77,8 +79,10 @@ CATEGORIES: list[CategoryDef] = [
             Field("budget_term", "Бюджет и срок:", "Budget and deadline:", "Бюджет/срок"),
         ),
     ),
+    CategoryDef("ready_visual", "🖼️ Готовые визуалы", "🖼️ Ready visuals",
+                "catalog", catalog_type="visual"),
     CategoryDef(
-        "visual", "🖼️ Визуал", "🖼️ Visuals", "custom",
+        "visual", "🖼️ Визуал (на заказ)", "🖼️ Visuals (custom)", "custom",
         thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
             Field("type", "Тип (обложка, баннер, арт, 3D):", "Type (cover, banner, art, 3D):", "Тип"),
@@ -135,3 +139,7 @@ def by_code(code: str) -> CategoryDef | None:
 
 def custom_categories() -> list[CategoryDef]:
     return [c for c in CATEGORIES if c.kind == "custom"]
+
+
+def catalog_categories() -> list[CategoryDef]:
+    return [c for c in CATEGORIES if c.kind == "catalog"]

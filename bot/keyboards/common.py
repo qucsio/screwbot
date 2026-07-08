@@ -78,14 +78,14 @@ def genre_keyboard(lang: Lang, genres: list[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def beat_card_keyboard(lang: Lang, work_id: int) -> InlineKeyboardMarkup:
+def work_card_keyboard(lang: Lang, work_id: int, catalog_type: str) -> InlineKeyboardMarkup:
+    nav = [InlineKeyboardButton(text=t("beat_prev", lang), callback_data="beatnav:prev")]
+    if catalog_type == "beat":
+        nav.append(InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}"))
+    nav.append(InlineKeyboardButton(text=t("beat_next", lang), callback_data="beatnav:next"))
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text=t("beat_prev", lang), callback_data="beatnav:prev"),
-                InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}"),
-                InlineKeyboardButton(text=t("beat_next", lang), callback_data="beatnav:next"),
-            ],
+            nav,
             [
                 InlineKeyboardButton(text=t("beat_buy", lang), callback_data=f"beat:buy:{work_id}"),
                 InlineKeyboardButton(text=t("beat_ask", lang), callback_data=f"beat:ask:{work_id}"),

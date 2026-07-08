@@ -216,4 +216,31 @@ TEXTS = {
     "review_prev": "⬅️",
     "review_next": "➡️",
     "review_upload_hint": "\n📸 Don't forget to upload a review: /review",
+    "addwork_choose": "What to add to the catalog?",
+    "addwork_beat": "🎧 Beat",
+    "addwork_visual": "🖼 Visual",
+    "addwork_only_creator": "⛔ Only approved creators can add works.",
+    "addvisual_title": "🖼 Work title:",
+    "addvisual_type": "Type (cover / banner / art / logo / 3D):",
+    "addvisual_cover": "Send the work image (photo):",
+    "addvisual_cover_invalid": "A photo is required. Send an image.",
+    "addvisual_price_buy": "💰 Price (RUB):",
+    "addvisual_sent": "✅ Visual sent for moderation.",
+    "mod_new_visual": (
+        "🆕 <b>New visual for moderation</b>\n\n"
+        "Author: {author}\n"
+        "Title: {title}\n"
+        "Type: {vtype}\n"
+        "Price: {buy} ₽"
+    ),
+    "work_approved_notify": "✅ Your work '{title}' is approved and added to the catalog.",
+    "work_rejected_notify": "❌ Your work '{title}' was rejected by moderation.",
+    "visual_card": (
+        "🖼 <b>{title}</b>\n"
+        "Author: {author}\n"
+        "Type: {vtype}\n"
+        "💰 Price: {buy} ₽\n"
+        "({pos}/{total})"
+    ),
+    "filter_type": "Choose a type:",
 }
