@@ -29,14 +29,7 @@ def role_keyboard(lang: Lang) -> InlineKeyboardMarkup:
     )
 
 
-def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
-    from bot.categories import CATEGORIES
-
-    # кнопки категорий из реестра + сервисные пункты в конце
-    titles = [c.title(lang) for c in CATEGORIES] + [t("menu_my_orders", lang)]
-    if is_creator:
-        titles.append(t("menu_my_profile", lang))
-    titles.append(t("menu_reviews", lang))
+def _build_keyboard(titles: list[str]) -> ReplyKeyboardMarkup:
     rows, row = [], []
     for i, title in enumerate(titles, 1):
         row.append(KeyboardButton(text=title))
@@ -46,6 +39,25 @@ def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
     if row:
         rows.append(row)
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
+    """Клавиатура по роли: у исполнителя нет клиентских кнопок заказа."""
+    if is_creator:
+        titles = [
+            t("menu_my_profile", lang),
+            t("menu_add_work", lang),
+            t("menu_my_orders", lang),
+            t("menu_reviews", lang),
+        ]
+    else:
+        from bot.categories import CATEGORIES
+
+        titles = [c.title(lang) for c in CATEGORIES] + [
+            t("menu_my_orders", lang),
+            t("menu_reviews", lang),
+        ]
+    return _build_keyboard(titles)
 
 
 def work_moderation_keyboard(lang: Lang, work_id: int) -> InlineKeyboardMarkup:

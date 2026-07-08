@@ -201,15 +201,19 @@ def _add_work_keyboard(lang: Lang):
     ]])
 
 
-@router.message(Command("addwork"))
-async def add_work_start(message: Message, session: AsyncSession, user: User | None):
-    if user is None:
-        return
+async def open_add_work(message: Message, session: AsyncSession, user: User):
     creator = await repo.get_approved_creator(session, user.id)
     if creator is None:
         await message.answer(t("addwork_only_creator", user.lang))
         return
     await message.answer(t("addwork_choose", user.lang), reply_markup=_add_work_keyboard(user.lang))
+
+
+@router.message(Command("addwork"))
+async def add_work_start(message: Message, session: AsyncSession, user: User | None):
+    if user is None:
+        return
+    await open_add_work(message, session, user)
 
 
 @router.callback_query(F.data == "addwork:beat")

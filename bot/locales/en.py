@@ -32,6 +32,7 @@ TEXTS = {
     "menu_photo": "📸 Photoshoot (Moscow)",
     "menu_reviews": "💬 Reviews",
     "menu_my_profile": "👤 My profile",
+    "menu_add_work": "➕ Add work",
     "back": "⬅️ Back",
     "wip": "🚧 Section under construction.",
     "mod_new_creator": (

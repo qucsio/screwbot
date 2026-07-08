@@ -3,6 +3,7 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import Creator, CreatorStatus, Lang, User
+from bot.keyboards.common import main_menu
 from bot.locales import t
 
 router = Router()
@@ -30,7 +31,8 @@ async def moderate_creator(call: CallbackQuery, session: AsyncSession, bot: Bot)
     await session.commit()
 
     try:
-        await bot.send_message(creator_user.tg_id, notify)
+        markup = main_menu(creator_user.lang, is_creator=True) if action == "approve" else None
+        await bot.send_message(creator_user.tg_id, notify, reply_markup=markup)
     except Exception:
         pass
 
