@@ -57,15 +57,19 @@ async def _get_creator(session: AsyncSession, user: User) -> Creator | None:
 # =========================================================================
 
 
-@router.message(Command("profile"))
-async def cmd_profile(message: Message, session: AsyncSession, user: User | None):
-    if user is None:
-        return
+async def open_profile(message: Message, session: AsyncSession, user: User):
     creator = await _get_creator(session, user)
     if creator is None:
         await message.answer(t("profile_only_creator", user.lang))
         return
     await message.answer(_profile_text(creator, user.lang), reply_markup=_profile_keyboard(user.lang))
+
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message, session: AsyncSession, user: User | None):
+    if user is None:
+        return
+    await open_profile(message, session, user)
 
 
 @router.callback_query(F.data == "prof:root")

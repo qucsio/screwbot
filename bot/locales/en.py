@@ -31,6 +31,7 @@ TEXTS = {
     "menu_editing": "🎬 Video editing",
     "menu_photo": "📸 Photoshoot (Moscow)",
     "menu_reviews": "💬 Reviews",
+    "menu_my_profile": "👤 My profile",
     "back": "⬅️ Back",
     "wip": "🚧 Section under construction.",
     "mod_new_creator": (

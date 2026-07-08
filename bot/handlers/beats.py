@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.categories import by_code
-from bot.db.models import Lang, ModerationStatus, User, Work
+from bot.db.models import Creator, Lang, ModerationStatus, User, Work
 from bot.db.repositories import works as repo
 from bot.keyboards.common import (
     filter_intro_keyboard,
@@ -132,7 +132,10 @@ async def addbeat_price_buy(
         await message.answer(t("addbeat_price_invalid", user.lang))
         return
     data = await state.get_data()
-    creator = await repo.get_approved_creator(session, user.id)
+    creator, direct = await _resolve_creator(session, data, user)
+    if creator is None:
+        await state.clear()
+        return
     category = await repo.get_category_by_code(session, READY_BEATS)
 
     work = Work(
@@ -146,22 +149,32 @@ async def addbeat_price_buy(
         bpm=data["bpm"],
         price_rent=data["price_rent"],
         price_buy=price,
-        moderation_status=ModerationStatus.pending,
+        moderation_status=ModerationStatus.approved if direct else ModerationStatus.pending,
     )
     session.add(work)
     await session.commit()
     await state.clear()
 
-    await message.answer(t("addbeat_sent", user.lang))
+    if direct:
+        await message.answer(t("adm_work_added_direct", Lang.ru))
+        return
 
+    await message.answer(t("addbeat_sent", user.lang))
     card = t(
         "mod_new_beat", Lang.ru,
         author=_contact(user), title=work.title,
         genre=work.genre, key=work.key, bpm=work.bpm,
         rent=_money(work.price_rent), buy=_money(work.price_buy),
     )
-    # обложку прикладываем отдельным фото + текстовая карточка с кнопками
     await send_to_moderation(bot, card, work_moderation_keyboard(Lang.ru, work.id))
+
+
+async def _resolve_creator(session: AsyncSession, data: dict, user: User):
+    """Возвращает (creator, direct): direct=True если грузит админ за автора."""
+    target = data.get("target_creator_id")
+    if target:
+        return await session.get(Creator, target), True
+    return await repo.get_approved_creator(session, user.id), False
 
 
 def _parse_price(text: str | None):
@@ -258,7 +271,10 @@ async def addvisual_price_buy(
         await message.answer(t("addbeat_price_invalid", user.lang))
         return
     data = await state.get_data()
-    creator = await repo.get_approved_creator(session, user.id)
+    creator, direct = await _resolve_creator(session, data, user)
+    if creator is None:
+        await state.clear()
+        return
     category = await repo.get_category_by_code(session, READY_VISUAL)
 
     work = Work(
@@ -268,11 +284,15 @@ async def addvisual_price_buy(
         cover_file_id=data["cover_file_id"],
         genre=data["vtype"],          # тип визуала храним в genre
         price_buy=price,
-        moderation_status=ModerationStatus.pending,
+        moderation_status=ModerationStatus.approved if direct else ModerationStatus.pending,
     )
     session.add(work)
     await session.commit()
     await state.clear()
+
+    if direct:
+        await message.answer(t("adm_work_added_direct", Lang.ru))
+        return
 
     await message.answer(t("addvisual_sent", user.lang))
     card = t(

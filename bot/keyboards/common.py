@@ -29,14 +29,14 @@ def role_keyboard(lang: Lang) -> InlineKeyboardMarkup:
     )
 
 
-def main_menu(lang: Lang) -> ReplyKeyboardMarkup:
+def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
     from bot.categories import CATEGORIES
 
     # кнопки категорий из реестра + сервисные пункты в конце
-    titles = [c.title(lang) for c in CATEGORIES] + [
-        t("menu_my_orders", lang),
-        t("menu_reviews", lang),
-    ]
+    titles = [c.title(lang) for c in CATEGORIES] + [t("menu_my_orders", lang)]
+    if is_creator:
+        titles.append(t("menu_my_profile", lang))
+    titles.append(t("menu_reviews", lang))
     rows, row = [], []
     for i, title in enumerate(titles, 1):
         row.append(KeyboardButton(text=title))

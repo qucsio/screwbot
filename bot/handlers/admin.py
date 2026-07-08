@@ -103,6 +103,10 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t("adm_btn_writeoff", L), callback_data=f"adm:writeoff:{creator.id}")],
+            [
+                InlineKeyboardButton(text=t("adm_btn_edit_profile", L), callback_data=f"adm:cprofile:{creator.id}"),
+                InlineKeyboardButton(text=t("adm_btn_add_work", L), callback_data=f"adm:cwork:{creator.id}"),
+            ],
             [toggle],
             [InlineKeyboardButton(text=t("adm_btn_del_creator", L), callback_data=f"adm:cdelete:{creator.id}")],
             [InlineKeyboardButton(text=t("back", L), callback_data="adm:creators")],
@@ -220,6 +224,86 @@ async def adm_add_creator_save(message: Message, state: FSMContext, session: Asy
         creator.status = CreatorStatus.approved
     await session.commit()
     await message.answer(t("adm_creator_added", L, contact=_contact(user)))
+
+
+# --- Правка профиля исполнителя админом ----------------------------------
+
+_EF_FIELDS = {"service": "service", "socials": "socials", "desc": "experience"}
+
+
+@router.callback_query(F.data.startswith("adm:cprofile:"))
+async def adm_creator_profile(call: CallbackQuery):
+    cid = int(call.data.split(":")[2])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=t("adm_btn_ef_service", L), callback_data=f"adm:cef:service:{cid}"),
+            InlineKeyboardButton(text=t("adm_btn_ef_socials", L), callback_data=f"adm:cef:socials:{cid}"),
+            InlineKeyboardButton(text=t("adm_btn_ef_desc", L), callback_data=f"adm:cef:desc:{cid}"),
+        ],
+        [InlineKeyboardButton(text=t("back", L), callback_data=f"adm:creator:{cid}")],
+    ])
+    await call.message.edit_text(t("adm_cprofile_title", L, cid=cid), reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:cef:"))
+async def adm_creator_edit_ask(call: CallbackQuery, state: FSMContext):
+    _, _, field, cid_raw = call.data.split(":")
+    await state.set_state(AdminStates.creator_field)
+    await state.update_data(creator_id=int(cid_raw), field=_EF_FIELDS[field])
+    prompt = {"service": "adm_ask_service", "socials": "adm_ask_socials", "desc": "adm_ask_desc"}[field]
+    await call.message.answer(t(prompt, L))
+    await call.answer()
+
+
+@router.message(AdminStates.creator_field)
+async def adm_creator_edit_save(message: Message, state: FSMContext, session: AsyncSession):
+    data = await state.get_data()
+    await state.clear()
+    creator = await session.get(Creator, data["creator_id"])
+    if creator is None:
+        return
+    setattr(creator, data["field"], (message.text or "").strip())
+    await session.commit()
+    await message.answer(t("adm_profile_saved", L))
+
+
+# --- Загрузка работы за автора -------------------------------------------
+
+
+@router.callback_query(F.data.startswith("adm:cwork:"))
+async def adm_creator_add_work(call: CallbackQuery):
+    cid = int(call.data.split(":")[2])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=t("addwork_beat", L), callback_data=f"adm:cworkbeat:{cid}"),
+        InlineKeyboardButton(text=t("addwork_visual", L), callback_data=f"adm:cworkvisual:{cid}"),
+    ]])
+    await call.message.answer(t("addwork_choose", L), reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:cworkbeat:"))
+async def adm_creator_add_beat(call: CallbackQuery, state: FSMContext):
+    from bot.states.beats import AddBeat
+
+    cid = int(call.data.split(":")[2])
+    await state.clear()
+    await state.set_state(AddBeat.title)
+    await state.update_data(target_creator_id=cid)
+    await call.message.answer(t("addbeat_title", L))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:cworkvisual:"))
+async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
+    from bot.states.beats import AddVisual
+
+    cid = int(call.data.split(":")[2])
+    await state.clear()
+    await state.set_state(AddVisual.title)
+    await state.update_data(target_creator_id=cid)
+    await call.message.answer(t("addvisual_title", L))
+    await call.answer()
 
 
 # =========================================================================

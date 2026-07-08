@@ -23,7 +23,10 @@ async def cmd_start(message: Message, state: FSMContext, user: User | None):
     await state.clear()
     # Уже зарегистрирован — сразу меню
     if user and user.role:
-        await message.answer(t("main_menu", user.lang), reply_markup=main_menu(user.lang))
+        await message.answer(
+            t("main_menu", user.lang),
+            reply_markup=main_menu(user.lang, is_creator=user.role == Role.creator),
+        )
         return
     await state.set_state(Registration.lang)
     await message.answer(t("choose_lang"), reply_markup=lang_keyboard())

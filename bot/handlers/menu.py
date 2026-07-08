@@ -8,6 +8,7 @@ from bot.db.models import User
 from bot.handlers.beats import open_catalog
 from bot.handlers.order_flow import open_orders
 from bot.handlers.orders import start_order
+from bot.handlers.profile import open_profile
 from bot.handlers.reviews import open_reviews
 from bot.locales import t
 
@@ -36,6 +37,11 @@ async def menu_router(
     # «Мои заказы»
     if text == t("menu_my_orders", user.lang):
         await open_orders(message, state, session, user)
+        return
+
+    # «Мой профиль» (исполнитель)
+    if text == t("menu_my_profile", user.lang):
+        await open_profile(message, session, user)
         return
 
     # «Отзывы»

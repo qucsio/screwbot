@@ -6,3 +6,4 @@ class AdminStates(StatesGroup):
     add_creator = State()    # ввод @username/id для ручного добавления
     work_value = State()     # правка текстового/числового поля работы (work_id, field в data)
     work_audio = State()     # перезапись аудио работы (work_id в data)
+    creator_field = State()  # правка поля профиля исполнителя (creator_id, field в data)
