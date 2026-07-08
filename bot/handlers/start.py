@@ -1,5 +1,5 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,19 @@ async def cmd_start(message: Message, state: FSMContext, user: User | None):
         return
     await state.set_state(Registration.lang)
     await message.answer(t("choose_lang"), reply_markup=lang_keyboard())
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext, user: User | None):
+    """Универсальная отмена любого пошагового процесса."""
+    await state.clear()
+    if user and user.role:
+        await message.answer(
+            t("cancelled", user.lang),
+            reply_markup=main_menu(user.lang, is_creator=user.role == Role.creator),
+        )
+    else:
+        await message.answer(t("cancelled", user.lang if user else Lang.ru))
 
 
 @router.callback_query(Registration.lang, F.data.startswith("lang:"))
