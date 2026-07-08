@@ -102,7 +102,10 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
     )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t("adm_btn_writeoff", L), callback_data=f"adm:writeoff:{creator.id}")],
+            [
+                InlineKeyboardButton(text=t("adm_btn_credit", L), callback_data=f"adm:bal:add:{creator.id}"),
+                InlineKeyboardButton(text=t("adm_btn_writeoff", L), callback_data=f"adm:bal:sub:{creator.id}"),
+            ],
             [
                 InlineKeyboardButton(text=t("adm_btn_edit_profile", L), callback_data=f"adm:cprofile:{creator.id}"),
                 InlineKeyboardButton(text=t("adm_btn_add_work", L), callback_data=f"adm:cwork:{creator.id}"),
@@ -188,16 +191,17 @@ async def adm_delete_creator(call: CallbackQuery, session: AsyncSession):
     await _show_creators(call, session)
 
 
-@router.callback_query(F.data.startswith("adm:writeoff:"))
-async def adm_writeoff_ask(call: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("adm:bal:"))
+async def adm_balance_ask(call: CallbackQuery, state: FSMContext):
+    _, _, op, cid_raw = call.data.split(":")   # op: add | sub
     await state.set_state(AdminStates.writeoff)
-    await state.update_data(creator_id=int(call.data.split(":")[2]))
-    await call.message.answer(t("adm_ask_writeoff", L))
+    await state.update_data(creator_id=int(cid_raw), op=op)
+    await call.message.answer(t("adm_ask_credit" if op == "add" else "adm_ask_writeoff", L))
     await call.answer()
 
 
 @router.message(AdminStates.writeoff)
-async def adm_writeoff_save(message: Message, state: FSMContext, session: AsyncSession):
+async def adm_balance_save(message: Message, state: FSMContext, session: AsyncSession):
     raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
     try:
         amount = Decimal(raw)
@@ -205,13 +209,15 @@ async def adm_writeoff_save(message: Message, state: FSMContext, session: AsyncS
         await message.answer(t("adm_writeoff_invalid", L))
         return
     data = await state.get_data()
+    op = data.get("op", "sub")
     await state.clear()
     pair = await repo.get_creator_full(session, data["creator_id"])
     if pair:
         creator = pair[0]
-        creator.balance = (creator.balance or Decimal(0)) - amount
+        creator.balance = (creator.balance or Decimal(0)) + (amount if op == "add" else -amount)
         await session.commit()
-        await message.answer(t("adm_writeoff_done", L, amount=amount, balance=_money(creator.balance)))
+        done_key = "adm_credit_done" if op == "add" else "adm_writeoff_done"
+        await message.answer(t(done_key, L, amount=amount, balance=_money(creator.balance)))
 
 
 # --- Ручное добавление исполнителя --------------------------------------
@@ -379,6 +385,11 @@ async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: i
         status=t(f"status_{work.moderation_status.value}", L),
     )
     await call.message.edit_text(text, reply_markup=_work_keyboard(work.id))
+    # прикладываем медиа отдельными сообщениями (обложка, для бита — аудио)
+    if work.cover_file_id:
+        await call.message.answer_photo(work.cover_file_id)
+    if work.audio_file_id:
+        await call.message.answer_audio(work.audio_file_id, title=work.title)
 
 
 @router.callback_query(F.data.startswith("adm:work:"))

@@ -184,6 +184,10 @@ async def open_work(call: CallbackQuery, session: AsyncSession, user: User):
         await call.answer()
         return
     await call.message.edit_text(_work_text(work, user.lang), reply_markup=_work_keyboard(work.id, user.lang))
+    if work.cover_file_id:
+        await call.message.answer_photo(work.cover_file_id)
+    if work.audio_file_id:
+        await call.message.answer_audio(work.audio_file_id, title=work.title)
     await call.answer()
 
 
