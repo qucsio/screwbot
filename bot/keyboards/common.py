@@ -60,20 +60,19 @@ def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
     return _build_keyboard(titles)
 
 
-def work_moderation_keyboard(lang: Lang, work_id: int, creator_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=t("mod_approve", lang), callback_data=f"modwork:approve:{work_id}"
-                ),
-                InlineKeyboardButton(
-                    text=t("mod_reject", lang), callback_data=f"modwork:reject:{work_id}"
-                ),
-            ],
-            [InlineKeyboardButton(text=t("mod_author_profile", lang), callback_data=f"modauthor:{creator_id}")],
-        ]
-    )
+def work_moderation_keyboard(
+    lang: Lang, work_id: int, creator_id: int, has_audio: bool = False
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text=t("mod_approve", lang), callback_data=f"modwork:approve:{work_id}"),
+            InlineKeyboardButton(text=t("mod_reject", lang), callback_data=f"modwork:reject:{work_id}"),
+        ],
+    ]
+    if has_audio:
+        rows.append([InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}")])
+    rows.append([InlineKeyboardButton(text=t("mod_author_profile", lang), callback_data=f"modauthor:{creator_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def filter_intro_keyboard(lang: Lang) -> InlineKeyboardMarkup:

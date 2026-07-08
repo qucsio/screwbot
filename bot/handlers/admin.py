@@ -16,6 +16,7 @@ from bot.db.models import Creator, CreatorStatus, Lang, Order, User
 from bot.db.repositories import works as repo
 from bot.filters import IsAdmin
 from bot.locales import t
+from bot.services.ui import replace_card
 from bot.states.admin import AdminStates
 
 router = Router()
@@ -336,14 +337,14 @@ async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
 async def _show_works(call: CallbackQuery, session: AsyncSession):
     works = await repo.list_recent_works(session)
     if not works:
-        await call.message.edit_text(t("adm_works_empty", L), reply_markup=_root_keyboard())
+        await replace_card(call, t("adm_works_empty", L), _root_keyboard())
         return
     rows = [
         [InlineKeyboardButton(text=f"{w.title} · #{w.id}", callback_data=f"adm:work:{w.id}")]
         for w in works
     ]
     rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:root")])
-    await call.message.edit_text(t("adm_works_title", L), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await replace_card(call, t("adm_works_title", L), InlineKeyboardMarkup(inline_keyboard=rows))
 
 
 @router.callback_query(F.data == "adm:works")
@@ -352,31 +353,27 @@ async def adm_works(call: CallbackQuery, session: AsyncSession):
     await call.answer()
 
 
-def _work_keyboard(work_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=t("adm_btn_edit_rent", L), callback_data=f"adm:wf:price_rent:{work_id}"),
-                InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
-            ],
-            [
-                InlineKeyboardButton(text=t("adm_btn_edit_genre", L), callback_data=f"adm:wf:genre:{work_id}"),
-                InlineKeyboardButton(text=t("adm_btn_edit_key", L), callback_data=f"adm:wf:key:{work_id}"),
-                InlineKeyboardButton(text=t("adm_btn_edit_bpm", L), callback_data=f"adm:wf:bpm:{work_id}"),
-            ],
-            [InlineKeyboardButton(text=t("adm_btn_edit_audio", L), callback_data=f"adm:waudio:{work_id}")],
-            [InlineKeyboardButton(text=t("adm_btn_del_work", L), callback_data=f"adm:wdel:{work_id}")],
-            [InlineKeyboardButton(text=t("back", L), callback_data="adm:works")],
-        ]
-    )
+def _work_keyboard(work_id: int, has_audio: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text=t("adm_btn_edit_rent", L), callback_data=f"adm:wf:price_rent:{work_id}"),
+            InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
+        ],
+        [
+            InlineKeyboardButton(text=t("adm_btn_edit_genre", L), callback_data=f"adm:wf:genre:{work_id}"),
+            InlineKeyboardButton(text=t("adm_btn_edit_key", L), callback_data=f"adm:wf:key:{work_id}"),
+            InlineKeyboardButton(text=t("adm_btn_edit_bpm", L), callback_data=f"adm:wf:bpm:{work_id}"),
+        ],
+        [InlineKeyboardButton(text=t("adm_btn_edit_audio", L), callback_data=f"adm:waudio:{work_id}")],
+    ]
+    if has_audio:
+        rows.append([InlineKeyboardButton(text=t("beat_listen", L), callback_data=f"beat:listen:{work_id}")])
+    rows.append([InlineKeyboardButton(text=t("adm_btn_del_work", L), callback_data=f"adm:wdel:{work_id}")])
+    rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:works")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: int):
-    pair = await repo.get_work_with_author(session, work_id)
-    if pair is None:
-        await call.answer()
-        return
-    work, author = pair
+def _work_card_content(work, author) -> tuple[str | None, str, InlineKeyboardMarkup]:
     text = t(
         "adm_work_card", L,
         title=work.title, wid=work.id, author=_contact(author),
@@ -384,12 +381,32 @@ async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: i
         rent=_money(work.price_rent), buy=_money(work.price_buy),
         status=t(f"status_{work.moderation_status.value}", L),
     )
-    await call.message.edit_text(text, reply_markup=_work_keyboard(work.id))
-    # прикладываем медиа отдельными сообщениями (обложка, для бита — аудио)
-    if work.cover_file_id:
-        await call.message.answer_photo(work.cover_file_id)
-    if work.audio_file_id:
-        await call.message.answer_audio(work.audio_file_id, title=work.title)
+    return work.cover_file_id, text, _work_keyboard(work.id, bool(work.audio_file_id))
+
+
+async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: int):
+    pair = await repo.get_work_with_author(session, work_id)
+    if pair is None:
+        await call.answer()
+        return
+    cover, text, kb = _work_card_content(*pair)
+    await replace_card(call, text, kb, photo=cover)
+
+
+async def _refresh_work_card(bot: Bot, session: AsyncSession, data: dict):
+    """Обновляет подпись карточки-фото на месте после правки поля."""
+    if not data.get("card_msg"):
+        return
+    pair = await repo.get_work_with_author(session, data["work_id"])
+    if pair is None:
+        return
+    _, text, kb = _work_card_content(*pair)
+    try:
+        await bot.edit_message_caption(
+            chat_id=data["card_chat"], message_id=data["card_msg"], caption=text, reply_markup=kb
+        )
+    except Exception:
+        pass
 
 
 @router.callback_query(F.data.startswith("adm:work:"))
@@ -415,7 +432,10 @@ _NUMERIC_FIELDS = {"price_rent", "price_buy", "bpm"}
 async def adm_work_field_ask(call: CallbackQuery, state: FSMContext):
     _, _, field, work_id_raw = call.data.split(":")
     await state.set_state(AdminStates.work_value)
-    await state.update_data(work_id=int(work_id_raw), field=field)
+    await state.update_data(
+        work_id=int(work_id_raw), field=field,
+        card_chat=call.message.chat.id, card_msg=call.message.message_id,
+    )
     if field == "bpm":
         prompt = t("adm_ask_bpm", L)
     elif field in ("price_rent", "price_buy"):
@@ -427,7 +447,7 @@ async def adm_work_field_ask(call: CallbackQuery, state: FSMContext):
 
 
 @router.message(AdminStates.work_value)
-async def adm_work_field_save(message: Message, state: FSMContext, session: AsyncSession):
+async def adm_work_field_save(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
     data = await state.get_data()
     field = data["field"]
     raw = (message.text or "").strip()
@@ -455,19 +475,23 @@ async def adm_work_field_save(message: Message, state: FSMContext, session: Asyn
         return
     setattr(work, field, value)
     await session.commit()
+    await _refresh_work_card(bot, session, data)
     await message.answer(t("adm_work_updated", L))
 
 
 @router.callback_query(F.data.startswith("adm:waudio:"))
 async def adm_work_audio_ask(call: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.work_audio)
-    await state.update_data(work_id=int(call.data.split(":")[2]))
+    await state.update_data(
+        work_id=int(call.data.split(":")[2]),
+        card_chat=call.message.chat.id, card_msg=call.message.message_id,
+    )
     await call.message.answer(t("adm_ask_audio", L))
     await call.answer()
 
 
 @router.message(AdminStates.work_audio, F.audio | F.voice | F.document)
-async def adm_work_audio_save(message: Message, state: FSMContext, session: AsyncSession):
+async def adm_work_audio_save(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
     file = message.audio or message.voice or message.document
     data = await state.get_data()
     await state.clear()
@@ -475,4 +499,5 @@ async def adm_work_audio_save(message: Message, state: FSMContext, session: Asyn
     if work:
         work.audio_file_id = file.file_id
         await session.commit()
+    await _refresh_work_card(bot, session, data)
     await message.answer(t("adm_work_updated", L))

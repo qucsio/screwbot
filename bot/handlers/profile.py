@@ -1,6 +1,6 @@
 from decimal import Decimal, InvalidOperation
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.db.models import Creator, ModerationStatus, User
 from bot.db.repositories import works as repo
 from bot.locales import t
+from bot.services.ui import replace_card
 from bot.states.profile import ProfileEdit
 
 router = Router()
@@ -138,17 +139,18 @@ def _works_keyboard(works, lang) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _work_keyboard(work_id: int, lang) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=t("btn_price_rent", lang), callback_data=f"prof:price:rent:{work_id}"),
-                InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}"),
-            ],
-            [InlineKeyboardButton(text=t("btn_delete_work", lang), callback_data=f"prof:del:{work_id}")],
-            [InlineKeyboardButton(text=t("back", lang), callback_data="prof:works")],
-        ]
-    )
+def _work_keyboard(work_id: int, lang, has_audio: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text=t("btn_price_rent", lang), callback_data=f"prof:price:rent:{work_id}"),
+            InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}"),
+        ],
+    ]
+    if has_audio:
+        rows.append([InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}")])
+    rows.append([InlineKeyboardButton(text=t("btn_delete_work", lang), callback_data=f"prof:del:{work_id}")])
+    rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="prof:works")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _work_text(work, lang) -> str:
@@ -168,10 +170,10 @@ async def my_works(call: CallbackQuery, session: AsyncSession, user: User):
         return
     works = await repo.list_creator_works(session, creator.id)
     if not works:
-        await call.message.edit_text(t("works_empty", user.lang), reply_markup=_profile_keyboard(user.lang))
+        await replace_card(call, t("works_empty", user.lang), _profile_keyboard(user.lang))
         await call.answer()
         return
-    await call.message.edit_text(t("works_list_title", user.lang), reply_markup=_works_keyboard(works, user.lang))
+    await replace_card(call, t("works_list_title", user.lang), _works_keyboard(works, user.lang))
     await call.answer()
 
 
@@ -183,11 +185,8 @@ async def open_work(call: CallbackQuery, session: AsyncSession, user: User):
     if work is None:
         await call.answer()
         return
-    await call.message.edit_text(_work_text(work, user.lang), reply_markup=_work_keyboard(work.id, user.lang))
-    if work.cover_file_id:
-        await call.message.answer_photo(work.cover_file_id)
-    if work.audio_file_id:
-        await call.message.answer_audio(work.audio_file_id, title=work.title)
+    kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id))
+    await replace_card(call, _work_text(work, user.lang), kb, photo=work.cover_file_id)
     await call.answer()
 
 
@@ -204,9 +203,9 @@ async def delete_work(call: CallbackQuery, session: AsyncSession, user: User):
     works = await repo.list_creator_works(session, creator.id)
     await call.answer(t("work_deleted", user.lang), show_alert=True)
     if works:
-        await call.message.edit_text(t("works_list_title", user.lang), reply_markup=_works_keyboard(works, user.lang))
+        await replace_card(call, t("works_list_title", user.lang), _works_keyboard(works, user.lang))
     else:
-        await call.message.edit_text(t("works_empty", user.lang), reply_markup=_profile_keyboard(user.lang))
+        await replace_card(call, t("works_empty", user.lang), _profile_keyboard(user.lang))
 
 
 @router.callback_query(F.data.startswith("prof:price:"))
@@ -218,13 +217,16 @@ async def ask_price(call: CallbackQuery, state: FSMContext, session: AsyncSessio
         await call.answer()
         return
     await state.set_state(ProfileEdit.price)
-    await state.update_data(work_id=work.id, price_kind=kind)
+    await state.update_data(
+        work_id=work.id, price_kind=kind,
+        card_chat=call.message.chat.id, card_msg=call.message.message_id,
+    )
     await call.message.answer(t("work_ask_price", user.lang))
     await call.answer()
 
 
 @router.message(ProfileEdit.price)
-async def save_price(message: Message, state: FSMContext, session: AsyncSession, user: User):
+async def save_price(message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
     raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
     try:
         price = Decimal(raw)
@@ -242,5 +244,14 @@ async def save_price(message: Message, state: FSMContext, session: AsyncSession,
     else:
         work.price_buy = price
     await session.commit()
+    # обновляем подпись карточки-фото на месте
+    if data.get("card_msg"):
+        kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id))
+        try:
+            await bot.edit_message_caption(
+                chat_id=data["card_chat"], message_id=data["card_msg"],
+                caption=_work_text(work, user.lang), reply_markup=kb,
+            )
+        except Exception:
+            pass
     await message.answer(t("work_price_updated", user.lang))
-    await message.answer(_work_text(work, user.lang), reply_markup=_work_keyboard(work.id, user.lang))

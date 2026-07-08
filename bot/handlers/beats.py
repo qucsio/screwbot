@@ -168,8 +168,7 @@ async def addbeat_price_buy(
     )
     await send_work_to_moderation(
         bot, card, work.cover_file_id,
-        work_moderation_keyboard(Lang.ru, work.id, creator.id),
-        audio_file_id=work.audio_file_id,
+        work_moderation_keyboard(Lang.ru, work.id, creator.id, has_audio=bool(work.audio_file_id)),
     )
 
 
