@@ -15,7 +15,7 @@ from bot.keyboards.common import (
     work_moderation_keyboard,
 )
 from bot.locales import t
-from bot.services.notify import notify_admin, send_to_moderation
+from bot.services.notify import notify_admin, send_work_to_moderation
 from bot.states.beats import AddBeat, AddVisual, BeatFilter
 
 router = Router()
@@ -166,7 +166,11 @@ async def addbeat_price_buy(
         genre=work.genre, key=work.key, bpm=work.bpm,
         rent=_money(work.price_rent), buy=_money(work.price_buy),
     )
-    await send_to_moderation(bot, card, work_moderation_keyboard(Lang.ru, work.id))
+    await send_work_to_moderation(
+        bot, card, work.cover_file_id,
+        work_moderation_keyboard(Lang.ru, work.id, creator.id),
+        audio_file_id=work.audio_file_id,
+    )
 
 
 async def _resolve_creator(session: AsyncSession, data: dict, user: User):
@@ -304,7 +308,10 @@ async def addvisual_price_buy(
         author=_contact(user), title=work.title,
         vtype=work.genre, buy=_money(work.price_buy),
     )
-    await send_to_moderation(bot, card, work_moderation_keyboard(Lang.ru, work.id))
+    await send_work_to_moderation(
+        bot, card, work.cover_file_id,
+        work_moderation_keyboard(Lang.ru, work.id, creator.id),
+    )
 
 
 # =========================================================================
@@ -336,7 +343,14 @@ async def moderate_work(call: CallbackQuery, session: AsyncSession, bot: Bot):
     except Exception:
         pass
 
-    await call.message.edit_text(f"{call.message.text}\n\n— {admin_msg}")
+    # карточка может быть фото (с подписью) или текстом
+    try:
+        if call.message.caption is not None:
+            await call.message.edit_caption(caption=f"{call.message.caption}\n\n— {admin_msg}")
+        else:
+            await call.message.edit_text(f"{call.message.text}\n\n— {admin_msg}")
+    except Exception:
+        pass
     await call.answer(admin_msg)
 
 

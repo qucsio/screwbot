@@ -60,7 +60,7 @@ def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
     return _build_keyboard(titles)
 
 
-def work_moderation_keyboard(lang: Lang, work_id: int) -> InlineKeyboardMarkup:
+def work_moderation_keyboard(lang: Lang, work_id: int, creator_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -70,7 +70,8 @@ def work_moderation_keyboard(lang: Lang, work_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=t("mod_reject", lang), callback_data=f"modwork:reject:{work_id}"
                 ),
-            ]
+            ],
+            [InlineKeyboardButton(text=t("mod_author_profile", lang), callback_data=f"modauthor:{creator_id}")],
         ]
     )
 

@@ -114,24 +114,40 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
     )
 
 
+def _creator_card_text(creator: Creator, user: User) -> str:
+    return t(
+        "adm_creator_card", L,
+        cid=creator.id, contact=_contact(user), nickname=user.nickname or "—",
+        service=creator.service or "—", status=_cstatus(creator.status),
+        balance=_money(creator.balance),
+    )
+
+
 async def _show_creator_card(call: CallbackQuery, session: AsyncSession, creator_id: int):
     pair = await repo.get_creator_full(session, creator_id)
     if pair is None:
         await call.answer()
         return
     creator, user = pair
-    text = t(
-        "adm_creator_card", L,
-        cid=creator.id, contact=_contact(user), nickname=user.nickname or "—",
-        service=creator.service or "—", status=_cstatus(creator.status),
-        balance=_money(creator.balance),
-    )
-    await call.message.edit_text(text, reply_markup=_creator_keyboard(creator))
+    await call.message.edit_text(_creator_card_text(creator, user), reply_markup=_creator_keyboard(creator))
 
 
 @router.callback_query(F.data.startswith("adm:creator:"))
 async def adm_creator_card(call: CallbackQuery, session: AsyncSession):
     await _show_creator_card(call, session, int(call.data.split(":")[2]))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("modauthor:"))
+async def adm_open_author(call: CallbackQuery, session: AsyncSession):
+    """Открыть карточку исполнителя из карточки модерации (новым сообщением)."""
+    cid = int(call.data.split(":")[1])
+    pair = await repo.get_creator_full(session, cid)
+    if pair is None:
+        await call.answer("not found", show_alert=True)
+        return
+    creator, user = pair
+    await call.message.answer(_creator_card_text(creator, user), reply_markup=_creator_keyboard(creator))
     await call.answer()
 
 

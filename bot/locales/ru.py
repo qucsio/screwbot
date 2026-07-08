@@ -48,6 +48,7 @@ TEXTS = {
     ),
     "mod_approve": "✅ Одобрить",
     "mod_reject": "❌ Отклонить",
+    "mod_author_profile": "👤 Профиль автора",
     "mod_approved_admin": "Исполнитель одобрен.",
     "mod_rejected_admin": "Заявка отклонена.",
     "creator_approved_notify": "🎉 Ваша заявка одобрена! Добро пожаловать в команду SCREW PROD.",
