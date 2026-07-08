@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.categories import CATEGORIES
 from bot.db.models import User
 from bot.handlers.beats import open_catalog
+from bot.handlers.order_flow import open_orders
 from bot.handlers.orders import start_order
 from bot.handlers.reviews import open_reviews
 from bot.locales import t
@@ -31,6 +32,11 @@ async def menu_router(
             else:
                 await message.answer(f"{text}\n\n{t('wip', user.lang)}")
             return
+
+    # «Мои заказы»
+    if text == t("menu_my_orders", user.lang):
+        await open_orders(message, state, session, user)
+        return
 
     # «Отзывы»
     if text == t("menu_reviews", user.lang):

@@ -52,6 +52,7 @@ class OrderStatus(str, enum.Enum):
     taken = "taken"                  # исполнитель взял
     await_prepay = "await_prepay"    # ждём 50%
     in_progress = "in_progress"      # предоплата подтверждена, работа идёт
+    demo_review = "demo_review"      # исполнитель сдал демо, ждём утверждения клиента
     await_final = "await_final"      # демо утверждено, ждём остальные 50%
     completed = "completed"
     cancelled = "cancelled"
