@@ -16,6 +16,14 @@ async def get_category_by_code(session: AsyncSession, code: str) -> Category | N
     return res.scalar_one_or_none()
 
 
+async def get_creator(session: AsyncSession, user_id: int) -> Creator | None:
+    """Строка исполнителя в любом статусе (pending/approved/blocked) или None."""
+    res = await session.execute(
+        select(Creator).where(Creator.user_id == user_id)
+    )
+    return res.scalar_one_or_none()
+
+
 async def get_approved_creator(session: AsyncSession, user_id: int) -> Creator | None:
     from bot.db.models import CreatorStatus
 

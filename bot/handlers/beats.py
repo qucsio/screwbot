@@ -15,8 +15,12 @@ from bot.keyboards.common import (
     work_moderation_keyboard,
 )
 from bot.locales import t
+from bot.services.forms import cancel_kb, guard_text, step
 from bot.services.notify import notify_admin, send_work_to_moderation
 from bot.states.beats import AddBeat, AddVisual, BeatFilter
+
+_BEAT_STEPS = 8
+_VISUAL_STEPS = 4
 
 router = Router()
 
@@ -53,50 +57,62 @@ async def addbeat_start(
         return
     await state.clear()
     await state.set_state(AddBeat.title)
-    await message.answer(t("addbeat_title", user.lang))
+    await message.answer(step(1, _BEAT_STEPS, "addbeat_title", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.title)
 async def addbeat_title(message: Message, state: FSMContext, user: User):
-    await state.update_data(title=message.text.strip()[:128])
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    await state.update_data(title=value[:128])
     await state.set_state(AddBeat.genre)
-    await message.answer(t("addbeat_genre", user.lang))
+    await message.answer(step(2, _BEAT_STEPS, "addbeat_genre", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.genre)
 async def addbeat_genre(message: Message, state: FSMContext, user: User):
-    await state.update_data(genre=message.text.strip()[:64])
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    await state.update_data(genre=value[:64])
     await state.set_state(AddBeat.key)
-    await message.answer(t("addbeat_key", user.lang))
+    await message.answer(step(3, _BEAT_STEPS, "addbeat_key", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.key)
 async def addbeat_key(message: Message, state: FSMContext, user: User):
-    await state.update_data(key=message.text.strip()[:16])
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    await state.update_data(key=value[:16])
     await state.set_state(AddBeat.bpm)
-    await message.answer(t("addbeat_bpm", user.lang))
+    await message.answer(step(4, _BEAT_STEPS, "addbeat_bpm", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.bpm)
 async def addbeat_bpm(message: Message, state: FSMContext, user: User):
     if not (message.text or "").strip().isdigit():
-        await message.answer(t("addbeat_bpm_invalid", user.lang))
+        await message.answer(t("addbeat_bpm_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     await state.update_data(bpm=int(message.text.strip()))
     await state.set_state(AddBeat.cover)
-    await message.answer(t("addbeat_cover", user.lang))
+    await message.answer(step(5, _BEAT_STEPS, "addbeat_cover", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.cover, F.photo)
 async def addbeat_cover(message: Message, state: FSMContext, user: User):
     await state.update_data(cover_file_id=message.photo[-1].file_id)
     await state.set_state(AddBeat.audio)
-    await message.answer(t("addbeat_audio", user.lang))
+    await message.answer(step(6, _BEAT_STEPS, "addbeat_audio", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.cover)
 async def addbeat_cover_invalid(message: Message, user: User):
-    await message.answer(t("addbeat_cover_invalid", user.lang))
+    await message.answer(t("addbeat_cover_invalid", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.audio, F.audio | F.voice | F.document)
@@ -104,23 +120,23 @@ async def addbeat_audio(message: Message, state: FSMContext, user: User):
     file = message.audio or message.voice or message.document
     await state.update_data(audio_file_id=file.file_id)
     await state.set_state(AddBeat.price_rent)
-    await message.answer(t("addbeat_price_rent", user.lang))
+    await message.answer(step(7, _BEAT_STEPS, "addbeat_price_rent", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.audio)
 async def addbeat_audio_invalid(message: Message, user: User):
-    await message.answer(t("addbeat_audio_invalid", user.lang))
+    await message.answer(t("addbeat_audio_invalid", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.price_rent)
 async def addbeat_price_rent(message: Message, state: FSMContext, user: User):
     price = _parse_price(message.text)
     if price is None:
-        await message.answer(t("addbeat_price_invalid", user.lang))
+        await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     await state.update_data(price_rent=price)
     await state.set_state(AddBeat.price_buy)
-    await message.answer(t("addbeat_price_buy", user.lang))
+    await message.answer(step(8, _BEAT_STEPS, "addbeat_price_buy", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.price_buy)
@@ -129,7 +145,7 @@ async def addbeat_price_buy(
 ):
     price = _parse_price(message.text)
     if price is None:
-        await message.answer(t("addbeat_price_invalid", user.lang))
+        await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     data = await state.get_data()
     creator, direct = await _resolve_creator(session, data, user)
@@ -227,7 +243,7 @@ async def add_work_beat(call: CallbackQuery, state: FSMContext, session: AsyncSe
         return
     await state.clear()
     await state.set_state(AddBeat.title)
-    await call.message.answer(t("addbeat_title", user.lang))
+    await call.message.answer(step(1, _BEAT_STEPS, "addbeat_title", user.lang), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
@@ -239,34 +255,42 @@ async def add_work_visual(call: CallbackQuery, state: FSMContext, session: Async
         return
     await state.clear()
     await state.set_state(AddVisual.title)
-    await call.message.answer(t("addvisual_title", user.lang))
+    await call.message.answer(step(1, _VISUAL_STEPS, "addvisual_title", user.lang), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
 @router.message(AddVisual.title)
 async def addvisual_title(message: Message, state: FSMContext, user: User):
-    await state.update_data(title=message.text.strip()[:128])
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    await state.update_data(title=value[:128])
     await state.set_state(AddVisual.vtype)
-    await message.answer(t("addvisual_type", user.lang))
+    await message.answer(step(2, _VISUAL_STEPS, "addvisual_type", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVisual.vtype)
 async def addvisual_type(message: Message, state: FSMContext, user: User):
-    await state.update_data(vtype=message.text.strip()[:64])
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    await state.update_data(vtype=value[:64])
     await state.set_state(AddVisual.cover)
-    await message.answer(t("addvisual_cover", user.lang))
+    await message.answer(step(3, _VISUAL_STEPS, "addvisual_cover", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVisual.cover, F.photo)
 async def addvisual_cover(message: Message, state: FSMContext, user: User):
     await state.update_data(cover_file_id=message.photo[-1].file_id)
     await state.set_state(AddVisual.price_buy)
-    await message.answer(t("addvisual_price_buy", user.lang))
+    await message.answer(step(4, _VISUAL_STEPS, "addvisual_price_buy", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVisual.cover)
 async def addvisual_cover_invalid(message: Message, user: User):
-    await message.answer(t("addvisual_cover_invalid", user.lang))
+    await message.answer(t("addvisual_cover_invalid", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVisual.price_buy)
@@ -275,7 +299,7 @@ async def addvisual_price_buy(
 ):
     price = _parse_price(message.text)
     if price is None:
-        await message.answer(t("addbeat_price_invalid", user.lang))
+        await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     data = await state.get_data()
     creator, direct = await _resolve_creator(session, data, user)
@@ -419,7 +443,10 @@ async def filter_pick_genre(call: CallbackQuery, state: FSMContext, session: Asy
 
 @router.message(BeatFilter.key)
 async def filter_key(message: Message, state: FSMContext, user: User):
-    val = message.text.strip()
+    val = guard_text(message)
+    if val is None:
+        await message.answer(t("need_text", user.lang))
+        return
     await state.update_data(f_key=None if val == "-" else val[:16])
     await state.set_state(BeatFilter.bpm)
     await message.answer(t("filter_bpm", user.lang))
@@ -428,7 +455,13 @@ async def filter_key(message: Message, state: FSMContext, user: User):
 @router.message(BeatFilter.bpm)
 async def filter_bpm(message: Message, state: FSMContext, session: AsyncSession, user: User):
     bpm_min = bpm_max = None
-    val = message.text.strip()
+    val = guard_text(message)
+    if val is None:
+        await message.answer(t("need_text", user.lang))
+        return
+    if val != "-" and not any(ch.isdigit() for ch in val):
+        await message.answer(t("filter_bpm", user.lang))
+        return
     if val != "-" and "-" in val:
         lo, _, hi = val.partition("-")
         if lo.strip().isdigit():
@@ -536,7 +569,7 @@ async def beat_ask(call: CallbackQuery, state: FSMContext, session: AsyncSession
     title = pair[0].title if pair else "—"
     await state.set_state(BeatQuestion.waiting)
     await state.update_data(ask_work_id=work_id, ask_title=title)
-    await call.message.answer(t("beat_ask_prompt", user.lang, title=title))
+    await call.message.answer(t("beat_ask_prompt", user.lang, title=title), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 

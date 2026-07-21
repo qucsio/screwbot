@@ -111,6 +111,7 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=t("adm_btn_edit_profile", L), callback_data=f"adm:cprofile:{creator.id}"),
                 InlineKeyboardButton(text=t("adm_btn_add_work", L), callback_data=f"adm:cwork:{creator.id}"),
             ],
+            [InlineKeyboardButton(text=t("btn_view_portfolio", L), callback_data=f"pfopen:{creator.id}")],
             [toggle],
             [InlineKeyboardButton(text=t("adm_btn_del_creator", L), callback_data=f"adm:cdelete:{creator.id}")],
             [InlineKeyboardButton(text=t("back", L), callback_data="adm:creators")],
@@ -307,25 +308,29 @@ async def adm_creator_add_work(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm:cworkbeat:"))
 async def adm_creator_add_beat(call: CallbackQuery, state: FSMContext):
+    from bot.handlers.beats import _BEAT_STEPS
+    from bot.services.forms import cancel_kb, step
     from bot.states.beats import AddBeat
 
     cid = int(call.data.split(":")[2])
     await state.clear()
     await state.set_state(AddBeat.title)
     await state.update_data(target_creator_id=cid)
-    await call.message.answer(t("addbeat_title", L))
+    await call.message.answer(step(1, _BEAT_STEPS, "addbeat_title", L), reply_markup=cancel_kb(L))
     await call.answer()
 
 
 @router.callback_query(F.data.startswith("adm:cworkvisual:"))
 async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
+    from bot.handlers.beats import _VISUAL_STEPS
+    from bot.services.forms import cancel_kb, step
     from bot.states.beats import AddVisual
 
     cid = int(call.data.split(":")[2])
     await state.clear()
     await state.set_state(AddVisual.title)
     await state.update_data(target_creator_id=cid)
-    await call.message.answer(t("addvisual_title", L))
+    await call.message.answer(step(1, _VISUAL_STEPS, "addvisual_title", L), reply_markup=cancel_kb(L))
     await call.answer()
 
 

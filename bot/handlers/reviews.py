@@ -14,7 +14,9 @@ from bot import app_config
 from bot.db.models import Lang, User
 from bot.db.repositories import reviews as repo
 from bot.db.repositories.works import get_approved_creator
+from bot.keyboards.common import creator_panel
 from bot.locales import t
+from bot.services.forms import cancel_kb
 from bot.states.reviews import ReviewUpload
 
 router = Router()
@@ -35,17 +37,21 @@ def _carousel_keyboard(lang: Lang) -> InlineKeyboardMarkup:
 # =========================================================================
 
 
-@router.message(Command("review"))
-async def review_start(message: Message, state: FSMContext, session: AsyncSession, user: User | None):
-    if user is None:
-        return
+async def start_review_upload(message: Message, state: FSMContext, session: AsyncSession, user: User):
     creator = await get_approved_creator(session, user.id)
     if creator is None:
         await message.answer(t("review_only_creator", user.lang))
         return
     await state.clear()
     await state.set_state(ReviewUpload.photo)
-    await message.answer(t("review_ask_photo", user.lang))
+    await message.answer(t("review_ask_photo", user.lang), reply_markup=cancel_kb(user.lang))
+
+
+@router.message(Command("review"))
+async def review_start(message: Message, state: FSMContext, session: AsyncSession, user: User | None):
+    if user is None:
+        return
+    await start_review_upload(message, state, session, user)
 
 
 @router.message(ReviewUpload.photo, F.photo)
@@ -59,19 +65,19 @@ async def review_photo(message: Message, state: FSMContext, session: AsyncSessio
     await state.clear()
 
     # зеркалим в публичный канал
+    saved_key = "review_saved_no_channel"
     if app_config.REVIEWS_CHANNEL_ID:
         try:
             await bot.send_photo(app_config.REVIEWS_CHANNEL_ID, file_id)
-            await message.answer(t("review_saved", user.lang))
-            return
+            saved_key = "review_saved"
         except Exception:
             pass
-    await message.answer(t("review_saved_no_channel", user.lang))
+    await message.answer(t(saved_key, user.lang), reply_markup=creator_panel(user.lang))
 
 
 @router.message(ReviewUpload.photo)
 async def review_not_photo(message: Message, user: User):
-    await message.answer(t("review_not_photo", user.lang))
+    await message.answer(t("review_not_photo", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 # =========================================================================

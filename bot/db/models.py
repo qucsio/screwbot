@@ -47,6 +47,13 @@ class ModerationStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class MediaType(str, enum.Enum):
+    photo = "photo"
+    video = "video"
+    audio = "audio"
+    document = "document"
+
+
 class OrderStatus(str, enum.Enum):
     published = "published"          # тендер в чате категории
     taken = "taken"                  # исполнитель взял
@@ -99,6 +106,23 @@ class Creator(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="creator")
+
+
+class PortfolioItem(Base):
+    """Один медиа-элемент портфолио исполнителя (фото/видео/аудио/документ)."""
+
+    __tablename__ = "portfolio_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    creator_id: Mapped[int] = mapped_column(
+        ForeignKey("creators.id", ondelete="CASCADE"), index=True
+    )
+    media_type: Mapped[MediaType] = mapped_column(SAEnum(MediaType))
+    file_id: Mapped[str] = mapped_column(String(256))
+    caption: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Category(Base):

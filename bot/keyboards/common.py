@@ -5,7 +5,7 @@ from aiogram.types import (
     KeyboardButton,
 )
 
-from bot.db.models import Lang
+from bot.db.models import CreatorStatus, Lang
 from bot.locales import t
 
 
@@ -20,11 +20,14 @@ def lang_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def role_keyboard(lang: Lang) -> InlineKeyboardMarkup:
+def settings_lang_keyboard() -> InlineKeyboardMarkup:
+    """Смена языка после регистрации (префикс setlang: — вне состояния регистрации)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t("role_client", lang), callback_data="role:client")],
-            [InlineKeyboardButton(text=t("role_creator", lang), callback_data="role:creator")],
+            [
+                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="setlang:ru"),
+                InlineKeyboardButton(text="🇬🇧 English", callback_data="setlang:en"),
+            ]
         ]
     )
 
@@ -41,22 +44,48 @@ def _build_keyboard(titles: list[str]) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
-def main_menu(lang: Lang, is_creator: bool = False) -> ReplyKeyboardMarkup:
-    """Клавиатура по роли: у исполнителя нет клиентских кнопок заказа."""
-    if is_creator:
-        titles = [
-            t("menu_my_profile", lang),
-            t("menu_add_work", lang),
-            t("menu_my_orders", lang),
-            t("menu_reviews", lang),
-        ]
-    else:
-        from bot.categories import CATEGORIES
+def main_menu(lang: Lang, creator_status: CreatorStatus | None = None) -> ReplyKeyboardMarkup:
+    """Базовое меню пользователя. Последняя кнопка зависит от статуса исполнителя.
 
-        titles = [c.title(lang) for c in CATEGORIES] + [
-            t("menu_my_orders", lang),
-            t("menu_reviews", lang),
-        ]
+    Каждый пользователь — клиент. В корне только каталоги готовых работ + вход в
+    подменю услуг «на заказ», чтобы меню не разрасталось. Исполнитель получает
+    вход в отдельную панель (creator_panel), а не свалку кнопок.
+    """
+    from bot.categories import catalog_categories
+
+    titles = [c.title(lang) for c in catalog_categories()] + [
+        t("menu_order_service", lang),
+        t("menu_my_orders", lang),
+        t("menu_reviews", lang),
+        t("menu_settings", lang),
+    ]
+    if creator_status == CreatorStatus.approved:
+        titles.append(t("menu_creator_panel", lang))
+    elif creator_status == CreatorStatus.pending:
+        titles.append(t("menu_application_pending", lang))
+    else:
+        titles.append(t("menu_become_creator", lang))
+    return _build_keyboard(titles)
+
+
+def order_menu(lang: Lang) -> ReplyKeyboardMarkup:
+    """Подменю услуг «на заказ» (формы ТЗ)."""
+    from bot.categories import custom_categories
+
+    titles = [c.title(lang) for c in custom_categories()] + [t("menu_back_main", lang)]
+    return _build_keyboard(titles)
+
+
+def creator_panel(lang: Lang) -> ReplyKeyboardMarkup:
+    """Отдельная панель одобренного исполнителя."""
+    titles = [
+        t("menu_my_profile", lang),
+        t("menu_add_work", lang),
+        t("menu_portfolio", lang),
+        t("menu_creator_orders", lang),
+        t("menu_upload_review", lang),
+        t("menu_back_main", lang),
+    ]
     return _build_keyboard(titles)
 
 
@@ -116,6 +145,7 @@ def moderation_keyboard(lang: Lang, creator_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=t("mod_reject", lang), callback_data=f"modcreator:reject:{creator_id}"
                 ),
-            ]
+            ],
+            [InlineKeyboardButton(text=t("btn_view_portfolio", lang), callback_data=f"pfopen:{creator_id}")],
         ]
     )

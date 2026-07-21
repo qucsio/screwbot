@@ -12,8 +12,10 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import Creator, ModerationStatus, User
+from bot.db.repositories import portfolio as portfolio_repo
 from bot.db.repositories import works as repo
 from bot.locales import t
+from bot.services.forms import cancel_kb, guard_text
 from bot.services.ui import replace_card
 from bot.states.profile import ProfileEdit
 
@@ -51,6 +53,13 @@ def _profile_text(creator: Creator, lang) -> str:
     )
 
 
+async def _profile_full_text(session: AsyncSession, creator: Creator, lang) -> str:
+    works = await repo.list_creator_works(session, creator.id)
+    media = await portfolio_repo.count(session, creator.id)
+    counts = t("profile_counts", lang, works=len(works), media=media)
+    return f"{_profile_text(creator, lang)}\n\n{counts}"
+
+
 async def _get_creator(session: AsyncSession, user: User) -> Creator | None:
     return await repo.get_approved_creator(session, user.id)
 
@@ -63,7 +72,8 @@ async def open_profile(message: Message, session: AsyncSession, user: User):
     if creator is None:
         await message.answer(t("profile_only_creator", user.lang))
         return
-    await message.answer(_profile_text(creator, user.lang), reply_markup=_profile_keyboard(user.lang))
+    text = await _profile_full_text(session, creator, user.lang)
+    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
 
 
 @router.message(Command("profile"))
@@ -79,7 +89,8 @@ async def profile_root(call: CallbackQuery, session: AsyncSession, user: User):
     if creator is None:
         await call.answer()
         return
-    await call.message.edit_text(_profile_text(creator, user.lang), reply_markup=_profile_keyboard(user.lang))
+    text = await _profile_full_text(session, creator, user.lang)
+    await call.message.edit_text(text, reply_markup=_profile_keyboard(user.lang))
     await call.answer()
 
 
@@ -97,37 +108,47 @@ async def profile_addwork(call: CallbackQuery, session: AsyncSession, user: User
 @router.callback_query(F.data == "prof:socials")
 async def edit_socials(call: CallbackQuery, state: FSMContext, user: User):
     await state.set_state(ProfileEdit.socials)
-    await call.message.answer(t("profile_ask_socials", user.lang))
+    await call.message.answer(t("profile_ask_socials", user.lang), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
 @router.callback_query(F.data == "prof:desc")
 async def edit_desc(call: CallbackQuery, state: FSMContext, user: User):
     await state.set_state(ProfileEdit.description)
-    await call.message.answer(t("profile_ask_desc", user.lang))
+    await call.message.answer(t("profile_ask_desc", user.lang), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
 @router.message(ProfileEdit.socials)
 async def save_socials(message: Message, state: FSMContext, session: AsyncSession, user: User):
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
     creator = await _get_creator(session, user)
     if creator:
-        creator.socials = (message.text or "").strip()
+        creator.socials = value
         await session.commit()
     await state.clear()
     await message.answer(t("profile_saved", user.lang))
-    await message.answer(_profile_text(creator, user.lang), reply_markup=_profile_keyboard(user.lang))
+    text = await _profile_full_text(session, creator, user.lang)
+    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
 
 
 @router.message(ProfileEdit.description)
 async def save_desc(message: Message, state: FSMContext, session: AsyncSession, user: User):
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
     creator = await _get_creator(session, user)
     if creator:
-        creator.experience = (message.text or "").strip()
+        creator.experience = value
         await session.commit()
     await state.clear()
     await message.answer(t("profile_saved", user.lang))
-    await message.answer(_profile_text(creator, user.lang), reply_markup=_profile_keyboard(user.lang))
+    text = await _profile_full_text(session, creator, user.lang)
+    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
 
 
 # --- Мои работы (CRUD) ---------------------------------------------------
@@ -221,7 +242,7 @@ async def ask_price(call: CallbackQuery, state: FSMContext, session: AsyncSessio
         work_id=work.id, price_kind=kind,
         card_chat=call.message.chat.id, card_msg=call.message.message_id,
     )
-    await call.message.answer(t("work_ask_price", user.lang))
+    await call.message.answer(t("work_ask_price", user.lang), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
@@ -231,7 +252,7 @@ async def save_price(message: Message, state: FSMContext, session: AsyncSession,
     try:
         price = Decimal(raw)
     except InvalidOperation:
-        await message.answer(t("work_price_invalid", user.lang))
+        await message.answer(t("work_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     data = await state.get_data()
     await state.clear()

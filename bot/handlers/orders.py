@@ -1,16 +1,16 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import app_config
 from bot.categories import by_code
-from bot.db.models import Category, Lang, Order, OrderStatus, Role, User
+from bot.db.models import Category, Lang, Order, OrderStatus, User
 from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_approved_creator, get_category_by_code
 from bot.keyboards.orders import take_order_keyboard
 from bot.locales import t
+from bot.services.forms import cancel_kb, guard_text, step_text
 from bot.services.order_view import contact, render_order_card
 from bot.states.orders import OrderForm
 
@@ -23,26 +23,24 @@ router = Router()
 
 
 async def start_order(message: Message, state: FSMContext, session: AsyncSession, user: User, code: str):
-    if user.role != Role.client:
-        await message.answer(t("order_only_client", user.lang))
+    # Заказ доступен любому зарегистрированному пользователю (все — клиенты).
+    if user.role is None:
         return
     category = await get_category_by_code(session, code)
     if category is None or not category.thread_id or not app_config.GROUP_ID:
         await message.answer(t("order_category_unavailable", user.lang))
         return
 
+    fields = by_code(code).fields
     await state.clear()
     await state.set_state(OrderForm.filling)
     await state.update_data(code=code, step=0, brief={})
     title = category.title_en if user.lang == Lang.en else category.title_ru
     await message.answer(t("order_form_start", user.lang, title=title))
-    await message.answer(by_code(code).fields[0].prompt(user.lang))
-
-
-@router.message(OrderForm.filling, Command("cancel"))
-async def cancel_form(message: Message, state: FSMContext, user: User):
-    await state.clear()
-    await message.answer(t("order_form_cancelled", user.lang))
+    await message.answer(
+        step_text(1, len(fields), fields[0].prompt(user.lang), user.lang),
+        reply_markup=cancel_kb(user.lang),
+    )
 
 
 @router.message(OrderForm.filling)
@@ -53,12 +51,19 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
     brief = data["brief"]
     fields = by_code(code).fields
 
-    brief[fields[step].key] = (message.text or "").strip()
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    brief[fields[step].key] = value
     step += 1
 
     if step < len(fields):
         await state.update_data(step=step, brief=brief)
-        await message.answer(fields[step].prompt(user.lang))
+        await message.answer(
+            step_text(step + 1, len(fields), fields[step].prompt(user.lang), user.lang),
+            reply_markup=cancel_kb(user.lang),
+        )
         return
 
     await state.clear()

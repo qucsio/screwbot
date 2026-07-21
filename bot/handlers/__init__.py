@@ -2,20 +2,24 @@ from aiogram import Router
 
 from bot.config import get_settings
 from bot.handlers import (
-    start, menu, moderation, beats, orders, order_flow, profile, admin, reviews, debug,
+    start, menu, moderation, beats, orders, order_flow, portfolio, profile,
+    admin, reviews, debug,
 )
+from bot.services import forms
 
 
 def setup_routers() -> Router:
     router = Router()
     if get_settings().debug_ids:
         router.include_router(debug.router)  # первым: перехватывает сообщения в группах
+    router.include_router(forms.router)     # form_cancel — раньше форм, ловит отмену везде
     router.include_router(admin.router)     # админ — раньше клиентских, ловит /admin и свои FSM
     router.include_router(start.router)
     router.include_router(moderation.router)
     router.include_router(beats.router)
     router.include_router(orders.router)
     router.include_router(order_flow.router)
+    router.include_router(portfolio.router)
     router.include_router(profile.router)
     router.include_router(reviews.router)
     router.include_router(menu.router)  # menu — последним: ловит остальной текст

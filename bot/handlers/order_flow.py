@@ -11,7 +11,7 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import app_config
-from bot.db.models import Lang, OrderStatus, Role, User
+from bot.db.models import Lang, OrderStatus, User
 from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_approved_creator
 from bot.locales import t
@@ -38,24 +38,32 @@ def _list_keyboard(orders, lang: Lang) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def open_orders(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    """Вход из меню «Мои заказы» — список под роль пользователя."""
-    if user.role == Role.creator:
+async def _load_orders(session: AsyncSession, user: User, as_creator: bool):
+    if as_creator:
         creator = await get_approved_creator(session, user.id)
         orders = await repo.list_for_creator(session, creator.id) if creator else []
-        title_key = "hub_orders_creator"
-    else:
-        orders = await repo.list_for_client(session, user.id)
-        title_key = "hub_orders_client"
+        return orders, "hub_orders_creator"
+    orders = await repo.list_for_client(session, user.id)
+    return orders, "hub_orders_client"
 
+
+async def open_orders(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, as_creator: bool = False
+):
+    """Вход из меню: клиентские «Мои заказы» или исполнительские «Заказы в работе»."""
+    await state.update_data(orders_scope="creator" if as_creator else "client")
+    orders, title_key = await _load_orders(session, user, as_creator)
     if not orders:
         await message.answer(t("hub_orders_empty", user.lang))
         return
     await message.answer(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang))
 
 
-def _viewer_for(user: User) -> str:
-    return "creator" if user.role == Role.creator else "client"
+def _viewer_for_order(user: User, order, creator_user) -> str:
+    """Роль-наблюдатель определяется по конкретному заказу (юзер может быть и тем, и тем)."""
+    if creator_user and creator_user[1].id == user.id:
+        return "creator"
+    return "client"
 
 
 def _with_back(kb: InlineKeyboardMarkup | None, lang: Lang) -> InlineKeyboardMarkup:
@@ -65,14 +73,10 @@ def _with_back(kb: InlineKeyboardMarkup | None, lang: Lang) -> InlineKeyboardMar
 
 
 @router.callback_query(F.data == "ord:list")
-async def back_to_list(call: CallbackQuery, session: AsyncSession, user: User):
-    if user.role == Role.creator:
-        creator = await get_approved_creator(session, user.id)
-        orders = await repo.list_for_creator(session, creator.id) if creator else []
-        title_key = "hub_orders_creator"
-    else:
-        orders = await repo.list_for_client(session, user.id)
-        title_key = "hub_orders_client"
+async def back_to_list(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    data = await state.get_data()
+    as_creator = data.get("orders_scope") == "creator"
+    orders, title_key = await _load_orders(session, user, as_creator)
     if not orders:
         await call.message.edit_text(t("hub_orders_empty", user.lang))
     else:
@@ -88,7 +92,8 @@ async def open_card(call: CallbackQuery, session: AsyncSession, user: User):
         await call.answer()
         return
     order, client, category, creator_user = bundle
-    text, kb = render_order_card(order, client, category, creator_user, _viewer_for(user), user.lang)
+    viewer = _viewer_for_order(user, order, creator_user)
+    text, kb = render_order_card(order, client, category, creator_user, viewer, user.lang)
     await call.message.edit_text(text, reply_markup=_with_back(kb, user.lang))
     await call.answer()
 
@@ -204,6 +209,11 @@ async def client_paid(call: CallbackQuery, session: AsyncSession, user: User, bo
         return
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
     await bot.send_message(app_config.ADMIN_ID, t("notify_paid_admin", Lang.ru, order_id=order_id))
+    # Убираем кнопку, чтобы клиент не слал повторные пинги админу.
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await call.answer(t("order_paid_waiting", user.lang), show_alert=True)
 
 

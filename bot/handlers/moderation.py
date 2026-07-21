@@ -31,7 +31,7 @@ async def moderate_creator(call: CallbackQuery, session: AsyncSession, bot: Bot)
     await session.commit()
 
     try:
-        markup = main_menu(creator_user.lang, is_creator=True) if action == "approve" else None
+        markup = main_menu(creator_user.lang, CreatorStatus.approved) if action == "approve" else None
         await bot.send_message(creator_user.tg_id, notify, reply_markup=markup)
     except Exception:
         pass

@@ -1,14 +1,7 @@
 TEXTS = {
     "choose_lang": "🌐 Choose your language / Выберите язык:",
     "lang_set": "Language set: English 🇬🇧",
-    "choose_role": "Who are you on the SCREW PROD platform?",
-    "role_client": "🎧 Client",
-    "role_creator": "🎨 Creator",
     "ask_nickname": "Enter your nickname in the system:",
-    "no_username": (
-        "⚠️ You have no @username set in Telegram. "
-        "It's required for contact. Set it in settings and press /start again."
-    ),
     "client_registered": (
         "✅ Done, {nickname}! You are registered as a client.\n"
         "Opening the services menu."
@@ -33,8 +26,52 @@ TEXTS = {
     "menu_reviews": "💬 Reviews",
     "menu_my_profile": "👤 My profile",
     "menu_add_work": "➕ Add work",
+    "menu_settings": "⚙️ Settings",
+    "menu_order_service": "🎼 Order a service",
+    "menu_become_creator": "🎨 Become a creator",
+    "menu_application_pending": "⏳ Application under review",
+    "menu_creator_panel": "🎛 Creator panel",
+    "menu_portfolio": "🖼 Portfolio",
+    "menu_creator_orders": "📁 Orders in progress",
+    "menu_upload_review": "📸 Upload review",
+    "menu_back_main": "⬅️ Back to main menu",
     "back": "⬅️ Back",
     "wip": "🚧 Section under construction.",
+    # Settings / language
+    "settings_root": "⚙️ Settings",
+    "settings_choose_lang": "🌐 Choose the interface language:",
+    "settings_lang_saved": "✅ Interface language updated.",
+    # Creator application (from menu)
+    "become_creator_intro": "🎨 Let's fill in the creator application. Answer one message at a time.",
+    "creator_already_approved": "✅ You are already a creator. Open the '🎛 Creator panel'.",
+    "application_pending_info": "⏳ Your application is under review. The admin will contact you.",
+    "creator_need_username": (
+        "⚠️ An @username is required to apply — the admin uses it to reach you. "
+        "Set it in Telegram settings and tap '🎨 Become a creator' again."
+    ),
+    "app_media_prompt": (
+        "📎 Optionally send portfolio samples (photo/video/audio/file), one at a time. "
+        "When done — tap 'Done'."
+    ),
+    "app_media_added": "✅ Added. Send another or tap 'Done'.",
+    "btn_app_media_done": "✅ Done",
+    "btn_view_portfolio": "🖼 Portfolio",
+    # Form framework
+    "form_cancel": "❌ Cancel",
+    "form_step": "🔹 Step {n}/{total}",
+    "need_text": "⚠️ Text required. Please reply with text.",
+    "need_photo": "⚠️ A photo is required. Send it as an image.",
+    "need_media": "⚠️ Send media: photo, video, audio or file.",
+    # Portfolio
+    "portfolio_only_creator": "⛔ Portfolio is available to approved creators.",
+    "portfolio_empty": "🖼 Portfolio is empty. Add the first item.",
+    "portfolio_add_prompt": "Send one portfolio media item: photo, video, audio or file.",
+    "portfolio_caption_prompt": "Add a caption for the item (or '-' to skip):",
+    "portfolio_saved": "✅ Item added to portfolio.",
+    "portfolio_deleted": "🗑 Item deleted.",
+    "portfolio_card": "🖼 Portfolio {pos}/{total}{caption}",
+    "btn_portfolio_add": "➕ Add",
+    "btn_portfolio_del": "🗑 Delete current",
     "mod_new_creator": (
         "🆕 <b>Creator application</b>\n\n"
         "Contact: {contact}\n"
@@ -105,9 +142,7 @@ TEXTS = {
         "Client: {contact}\nAuthor: {author}\n"
         "Rent: {rent} ₽ | Buyout: {buy} ₽"
     ),
-    "order_only_client": "⛔ Only clients can place orders.",
-    "order_form_start": "📝 Order brief '{title}'. Answer one message at a time.\n/cancel — abort.",
-    "order_form_cancelled": "❌ Order creation cancelled.",
+    "order_form_start": "📝 Order brief '{title}'. Answer one message at a time.",
     "order_published": "✅ Your order #{order_id} is published. Waiting for a creator to take it.",
     "order_category_unavailable": "⚠️ Category temporarily unavailable (topic not configured). Try later.",
     "tender_card": "🆕 <b>New order</b> · {title} · #{order_id}\nFrom: {contact}\n\n{body}",
@@ -180,14 +215,13 @@ TEXTS = {
         "Description: {desc}\n\n"
         "💵 Balance for payout: <b>{balance} ₽</b>"
     ),
+    "profile_counts": "🎵 Works: {works} · 🖼 Portfolio: {media}",
     "btn_edit_socials": "🔗 Socials",
     "btn_edit_desc": "📝 Description",
     "btn_my_works": "🎵 My works",
-    "btn_add_beat": "➕ Add beat",
     "profile_ask_socials": "Send your new social links in one message:",
     "profile_ask_desc": "Send your new description:",
     "profile_saved": "✅ Saved.",
-    "add_beat_hint": "To add a beat, send the /addbeat command",
     "works_empty": "You have no uploaded works yet.",
     "works_list_title": "🎵 Your works (tap to edit):",
     "work_detail": (
