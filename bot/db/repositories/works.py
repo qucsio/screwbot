@@ -147,3 +147,12 @@ async def list_recent_works(session: AsyncSession, limit: int = 30) -> list[Work
 
 async def get_work(session: AsyncSession, work_id: int) -> Work | None:
     return await session.get(Work, work_id)
+
+
+async def work_catalog_type(session: AsyncSession, work: Work) -> str:
+    """"beat" | "visual" — по коду категории работы (для правильного рендера карточки)."""
+    from bot.categories import by_code
+
+    category = await session.get(Category, work.category_id)
+    cdef = by_code(category.code) if category else None
+    return (cdef.catalog_type if cdef else "") or "beat"

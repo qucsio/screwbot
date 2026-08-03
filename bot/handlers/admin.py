@@ -358,35 +358,52 @@ async def adm_works(call: CallbackQuery, session: AsyncSession):
     await call.answer()
 
 
-def _work_keyboard(work_id: int, has_audio: bool = False) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(text=t("adm_btn_edit_rent", L), callback_data=f"adm:wf:price_rent:{work_id}"),
-            InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
-        ],
-        [
-            InlineKeyboardButton(text=t("adm_btn_edit_genre", L), callback_data=f"adm:wf:genre:{work_id}"),
-            InlineKeyboardButton(text=t("adm_btn_edit_key", L), callback_data=f"adm:wf:key:{work_id}"),
-            InlineKeyboardButton(text=t("adm_btn_edit_bpm", L), callback_data=f"adm:wf:bpm:{work_id}"),
-        ],
-        [InlineKeyboardButton(text=t("adm_btn_edit_audio", L), callback_data=f"adm:waudio:{work_id}")],
-    ]
-    if has_audio:
-        rows.append([InlineKeyboardButton(text=t("beat_listen", L), callback_data=f"beat:listen:{work_id}")])
+def _work_keyboard(work_id: int, has_audio: bool = False, ctype: str = "beat") -> InlineKeyboardMarkup:
+    if ctype == "visual":
+        # у визуала нет аренды/тональности/BPM/аудио — только тип и цена выкупа
+        rows = [
+            [
+                InlineKeyboardButton(text=t("adm_btn_edit_type", L), callback_data=f"adm:wf:genre:{work_id}"),
+                InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
+            ],
+        ]
+    else:
+        rows = [
+            [
+                InlineKeyboardButton(text=t("adm_btn_edit_rent", L), callback_data=f"adm:wf:price_rent:{work_id}"),
+                InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
+            ],
+            [
+                InlineKeyboardButton(text=t("adm_btn_edit_genre", L), callback_data=f"adm:wf:genre:{work_id}"),
+                InlineKeyboardButton(text=t("adm_btn_edit_key", L), callback_data=f"adm:wf:key:{work_id}"),
+                InlineKeyboardButton(text=t("adm_btn_edit_bpm", L), callback_data=f"adm:wf:bpm:{work_id}"),
+            ],
+            [InlineKeyboardButton(text=t("adm_btn_edit_audio", L), callback_data=f"adm:waudio:{work_id}")],
+        ]
+        if has_audio:
+            rows.append([InlineKeyboardButton(text=t("beat_listen", L), callback_data=f"beat:listen:{work_id}")])
     rows.append([InlineKeyboardButton(text=t("adm_btn_del_work", L), callback_data=f"adm:wdel:{work_id}")])
     rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:works")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _work_card_content(work, author) -> tuple[str | None, str, InlineKeyboardMarkup]:
-    text = t(
-        "adm_work_card", L,
-        title=work.title, wid=work.id, author=_contact(author),
-        genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
-        rent=_money(work.price_rent), buy=_money(work.price_buy),
-        status=t(f"status_{work.moderation_status.value}", L),
-    )
-    return work.cover_file_id, text, _work_keyboard(work.id, bool(work.audio_file_id))
+def _work_card_content(work, author, ctype: str = "beat") -> tuple[str | None, str, InlineKeyboardMarkup]:
+    if ctype == "visual":
+        text = t(
+            "adm_work_card_visual", L,
+            title=work.title, wid=work.id, author=_contact(author),
+            vtype=work.genre or "—", buy=_money(work.price_buy),
+            status=t(f"status_{work.moderation_status.value}", L),
+        )
+    else:
+        text = t(
+            "adm_work_card", L,
+            title=work.title, wid=work.id, author=_contact(author),
+            genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
+            rent=_money(work.price_rent), buy=_money(work.price_buy),
+            status=t(f"status_{work.moderation_status.value}", L),
+        )
+    return work.cover_file_id, text, _work_keyboard(work.id, bool(work.audio_file_id), ctype)
 
 
 async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: int):
@@ -394,7 +411,8 @@ async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: i
     if pair is None:
         await call.answer()
         return
-    cover, text, kb = _work_card_content(*pair)
+    ctype = await repo.work_catalog_type(session, pair[0])
+    cover, text, kb = _work_card_content(*pair, ctype)
     await replace_card(call, text, kb, photo=cover)
 
 
@@ -405,7 +423,8 @@ async def _refresh_work_card(bot: Bot, session: AsyncSession, data: dict):
     pair = await repo.get_work_with_author(session, data["work_id"])
     if pair is None:
         return
-    _, text, kb = _work_card_content(*pair)
+    ctype = await repo.work_catalog_type(session, pair[0])
+    _, text, kb = _work_card_content(*pair, ctype)
     try:
         await bot.edit_message_caption(
             chat_id=data["card_chat"], message_id=data["card_msg"], caption=text, reply_markup=kb

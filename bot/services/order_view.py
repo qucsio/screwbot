@@ -44,6 +44,9 @@ def render_order_card(
         body = "\n".join(f"• {f.label}: {order.brief.get(f.key, '—')}" for f in cdef.fields)
         if body:
             lines.append("\n" + body)
+        attachments = order.brief.get("_attachments") or []
+        if attachments:
+            lines.append("\n" + t("order_card_attachments", lang, count=len(attachments)))
 
     # контакты (после предоплаты)
     if order.status in _CONTACTS_OPEN and creator_user:

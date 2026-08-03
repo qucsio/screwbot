@@ -39,6 +39,7 @@ def _profile_keyboard(lang) -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton(text=t("btn_my_works", lang), callback_data="prof:works")],
             [InlineKeyboardButton(text=t("addwork_choose", lang), callback_data="prof:addwork")],
+            [InlineKeyboardButton(text=t("btn_delete_profile", lang), callback_data="prof:delete")],
         ]
     )
 
@@ -160,21 +161,32 @@ def _works_keyboard(works, lang) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _work_keyboard(work_id: int, lang, has_audio: bool = False) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(text=t("btn_price_rent", lang), callback_data=f"prof:price:rent:{work_id}"),
-            InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}"),
-        ],
-    ]
-    if has_audio:
-        rows.append([InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}")])
+def _work_keyboard(work_id: int, lang, has_audio: bool = False, ctype: str = "beat") -> InlineKeyboardMarkup:
+    if ctype == "visual":
+        # у визуала нет аренды/аудио — только цена выкупа
+        rows = [[InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}")]]
+    else:
+        rows = [
+            [
+                InlineKeyboardButton(text=t("btn_price_rent", lang), callback_data=f"prof:price:rent:{work_id}"),
+                InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}"),
+            ],
+        ]
+        if has_audio:
+            rows.append([InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}")])
     rows.append([InlineKeyboardButton(text=t("btn_delete_work", lang), callback_data=f"prof:del:{work_id}")])
     rows.append([InlineKeyboardButton(text=t("back", lang), callback_data="prof:works")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _work_text(work, lang) -> str:
+def _work_text(work, lang, ctype: str = "beat") -> str:
+    if ctype == "visual":
+        return t(
+            "work_detail_visual", lang,
+            title=work.title, vtype=work.genre or "—",
+            buy=_money(work.price_buy),
+            status=_status_text(work.moderation_status, lang),
+        )
     return t(
         "work_detail", lang,
         title=work.title, genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
@@ -206,8 +218,9 @@ async def open_work(call: CallbackQuery, session: AsyncSession, user: User):
     if work is None:
         await call.answer()
         return
-    kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id))
-    await replace_card(call, _work_text(work, user.lang), kb, photo=work.cover_file_id)
+    ctype = await repo.work_catalog_type(session, work)
+    kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id), ctype)
+    await replace_card(call, _work_text(work, user.lang, ctype), kb, photo=work.cover_file_id)
     await call.answer()
 
 
@@ -267,12 +280,55 @@ async def save_price(message: Message, state: FSMContext, session: AsyncSession,
     await session.commit()
     # обновляем подпись карточки-фото на месте
     if data.get("card_msg"):
-        kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id))
+        ctype = await repo.work_catalog_type(session, work)
+        kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id), ctype)
         try:
             await bot.edit_message_caption(
                 chat_id=data["card_chat"], message_id=data["card_msg"],
-                caption=_work_text(work, user.lang), reply_markup=kb,
+                caption=_work_text(work, user.lang, ctype), reply_markup=kb,
             )
         except Exception:
             pass
     await message.answer(t("work_price_updated", user.lang))
+
+
+# --- Удаление своего профиля исполнителем --------------------------------
+
+
+def _delete_confirm_kb(lang) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t("btn_delete_profile_yes", lang), callback_data="prof:delete:yes")],
+            [InlineKeyboardButton(text=t("back", lang), callback_data="prof:root")],
+        ]
+    )
+
+
+@router.callback_query(F.data == "prof:delete")
+async def profile_delete_ask(call: CallbackQuery, session: AsyncSession, user: User):
+    creator = await _get_creator(session, user)
+    if creator is None:
+        await call.answer()
+        return
+    await call.message.answer(t("profile_delete_confirm", user.lang), reply_markup=_delete_confirm_kb(user.lang))
+    await call.answer()
+
+
+@router.callback_query(F.data == "prof:delete:yes")
+async def profile_delete_do(call: CallbackQuery, session: AsyncSession, user: User):
+    from sqlalchemy import update
+
+    from bot.db.models import Order
+    from bot.keyboards.common import main_menu
+
+    creator = await _get_creator(session, user)
+    if creator is None:
+        await call.answer()
+        return
+    # отвязываем от заказов (FK без ON DELETE); работы и портфолио уйдут каскадом
+    await session.execute(update(Order).where(Order.creator_id == creator.id).values(creator_id=None))
+    await session.delete(creator)
+    await session.commit()
+    await call.answer(t("profile_deleted", user.lang), show_alert=True)
+    # исполнитель снова просто клиент — возвращаем базовое меню
+    await call.message.answer(t("main_menu", user.lang), reply_markup=main_menu(user.lang, None))

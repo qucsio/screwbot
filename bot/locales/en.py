@@ -142,8 +142,24 @@ TEXTS = {
         "Client: {contact}\nAuthor: {author}\n"
         "Rent: {rent} ₽ | Buyout: {buy} ₽"
     ),
-    "order_form_start": "📝 Order brief '{title}'. Answer one message at a time.",
+    "order_form_start": (
+        "📝 Order brief '{title}'. Answer one message at a time.\n"
+        "📎 You'll be able to attach images and files (references, examples) at the end — "
+        "for now, please reply with text."
+    ),
+    "order_need_text": (
+        "⚠️ This step needs text. You'll be able to attach images and files at the end, "
+        "after all the questions."
+    ),
     "order_published": "✅ Your order #{order_id} is published. Waiting for a creator to take it.",
+    "order_attach_prompt": (
+        "📎 Attach images or files to the brief (references, examples) — one per message. "
+        "Press 'Done' when finished. This is optional."
+    ),
+    "order_attach_added": "✅ Attachment added (total: {count}). Send more or press 'Done'.",
+    "order_attach_need_media": "⚠️ Send an image or file, or press 'Done'.",
+    "order_attach_done": "✅ Done",
+    "order_card_attachments": "📎 Attachments from client: {count}",
     "order_category_unavailable": "⚠️ Category temporarily unavailable (topic not configured). Try later.",
     "tender_card": "🆕 <b>New order</b> · {title} · #{order_id}\nFrom: {contact}\n\n{body}",
     "btn_take_order": "✅ Take order",
@@ -219,6 +235,13 @@ TEXTS = {
     "btn_edit_socials": "🔗 Socials",
     "btn_edit_desc": "📝 Description",
     "btn_my_works": "🎵 My works",
+    "btn_delete_profile": "🗑 Delete profile",
+    "btn_delete_profile_yes": "🗑 Yes, delete my profile",
+    "profile_delete_confirm": (
+        "⚠️ Delete your creator profile? This removes your works from the catalog and your portfolio. "
+        "This cannot be undone. You will remain a regular client."
+    ),
+    "profile_deleted": "🗑 Your creator profile has been deleted.",
     "profile_ask_socials": "Send your new social links in one message:",
     "profile_ask_desc": "Send your new description:",
     "profile_saved": "✅ Saved.",
@@ -228,6 +251,12 @@ TEXTS = {
         "🎵 <b>{title}</b>\n"
         "Genre: {genre} | Key: {key} | BPM: {bpm}\n"
         "💸 Rent: {rent} ₽ | 💰 Buyout: {buy} ₽\n"
+        "Status: {status}"
+    ),
+    "work_detail_visual": (
+        "🖼 <b>{title}</b>\n"
+        "Type: {vtype}\n"
+        "💰 Price: {buy} ₽\n"
         "Status: {status}"
     ),
     "btn_price_rent": "💸 Rent price",

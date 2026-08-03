@@ -101,7 +101,7 @@ CATEGORIES: list[CategoryDef] = [
             Field("idea", "Идея/сценарий:", "Idea/script:", "Идея"),
             Field("location", "Локация:", "Location:", "Локация"),
             Field("dates", "Сроки съёмки:", "Shooting dates:", "Сроки"),
-            Field("budget_term", "Бюджет и срок:", "Budget and deadline:", "Бюджет/срок"),
+            Field("budget", "Бюджет:", "Budget:", "Бюджет"),
         ),
     ),
     CategoryDef(
@@ -117,15 +117,15 @@ CATEGORIES: list[CategoryDef] = [
         ),
     ),
     CategoryDef(
-        "photo", "📸 Фото-сессия (Москва)", "📸 Photoshoot (Moscow)", "custom",
+        "photo", "📸 Фото-сессия", "📸 Photoshoot", "custom",
         thread_id=0,  # ← id топика-тендера в супергруппе
         fields=(
-            Field("city", "Город (строго Москва):", "City (Moscow only):", "Город"),
+            Field("city", "Город (укажите свой):", "City (specify yours):", "Город"),
             Field("style", "Стиль съёмки:", "Shooting style:", "Стиль"),
             Field("looks", "Количество образов:", "Number of looks:", "Образы"),
             Field("dates", "Сроки:", "Dates:", "Сроки"),
             Field("examples", "Примеры:", "Examples:", "Примеры"),
-            Field("budget_term", "Бюджет и срок:", "Budget and deadline:", "Бюджет/срок"),
+            Field("budget", "Бюджет:", "Budget:", "Бюджет"),
         ),
     ),
 ]

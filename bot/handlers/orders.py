@@ -53,7 +53,7 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
 
     value = guard_text(message)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
+        await message.answer(t("order_need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     brief[fields[step].key] = value
     step += 1
@@ -66,7 +66,48 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
         )
         return
 
+    # Текстовые шаги пройдены — предлагаем необязательно прикрепить изображения/файлы.
+    await state.update_data(brief=brief, attachments=[])
+    await state.set_state(OrderForm.attachments)
+    await message.answer(t("order_attach_prompt", user.lang), reply_markup=_attach_done_kb(user.lang))
+
+
+def _attach_done_kb(lang: Lang):
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=t("order_attach_done", lang), callback_data="ordattach:done")]]
+    )
+
+
+@router.message(OrderForm.attachments)
+async def order_attachment(message: Message, state: FSMContext, user: User):
+    from bot.handlers.portfolio import detect_media
+
+    found = detect_media(message)
+    if found is None:
+        await message.answer(t("order_attach_need_media", user.lang), reply_markup=_attach_done_kb(user.lang))
+        return
+    media_type, file_id = found
+    data = await state.get_data()
+    attachments = data.get("attachments", [])
+    attachments.append({"type": media_type.value, "file_id": file_id})
+    await state.update_data(attachments=attachments)
+    await message.answer(
+        t("order_attach_added", user.lang, count=len(attachments)),
+        reply_markup=_attach_done_kb(user.lang),
+    )
+
+
+@router.callback_query(OrderForm.attachments, F.data == "ordattach:done")
+async def order_attachments_done(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
+    data = await state.get_data()
     await state.clear()
+    code = data["code"]
+    brief = data["brief"]
+    attachments = data.get("attachments", [])
+    if attachments:
+        brief["_attachments"] = attachments
     category = await get_category_by_code(session, code)
     order = Order(
         client_id=user.id,
@@ -78,7 +119,8 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
     await session.commit()
 
     await publish_tender(bot, session, order, category, user)
-    await message.answer(t("order_published", user.lang, order_id=order.id))
+    await call.message.answer(t("order_published", user.lang, order_id=order.id))
+    await call.answer()
 
 
 async def publish_tender(bot: Bot, session: AsyncSession, order: Order, category: Category, client: User):
@@ -97,6 +139,26 @@ async def publish_tender(bot: Bot, session: AsyncSession, order: Order, category
     )
     order.tender_message_id = sent.message_id
     await session.commit()
+
+    # Вложения клиента (изображения/файлы) — отдельными сообщениями в тот же топик.
+    for att in (order.brief.get("_attachments") or []):
+        try:
+            await _send_attachment(bot, category.thread_id, att)
+        except Exception:
+            pass
+
+
+async def _send_attachment(bot: Bot, thread_id: int, att: dict) -> None:
+    kind, file_id = att.get("type"), att.get("file_id")
+    kwargs = {"message_thread_id": thread_id}
+    if kind == "photo":
+        await bot.send_photo(app_config.GROUP_ID, file_id, **kwargs)
+    elif kind == "video":
+        await bot.send_video(app_config.GROUP_ID, file_id, **kwargs)
+    elif kind == "audio":
+        await bot.send_audio(app_config.GROUP_ID, file_id, **kwargs)
+    else:
+        await bot.send_document(app_config.GROUP_ID, file_id, **kwargs)
 
 
 # =========================================================================
