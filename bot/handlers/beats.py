@@ -662,11 +662,16 @@ async def beat_buy(call: CallbackQuery, session: AsyncSession, user: User, bot: 
         await call.answer()
         return
     work, author = pair
+    # у битов есть аренда, у визуала/видео — только цена выкупа
+    if work.price_rent is not None:
+        prices = f"Аренда: {_money(work.price_rent)} ₽ | Выкуп: {_money(work.price_buy)} ₽"
+    else:
+        prices = f"Цена: {_money(work.price_buy)} ₽"
     text = t(
         "mod_beat_buy", Lang.ru,
         title=work.title, work_id=work.id,
         contact=_contact(user), author=_contact(author),
-        rent=_money(work.price_rent), buy=_money(work.price_buy),
+        prices=prices,
     )
     await notify_admin(bot, text)
     await call.answer(t("beat_buy_sent", user.lang), show_alert=True)

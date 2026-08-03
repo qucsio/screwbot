@@ -115,7 +115,7 @@ TEXTS = {
     "beat_approved_notify": "✅ Ваш бит «{title}» одобрен и добавлен в каталог.",
     "beat_rejected_notify": "❌ Ваш бит «{title}» отклонён модерацией.",
     # --- Каталог / фильтр / карусель ---
-    "catalog_empty": "😔 В каталоге пока нет одобренных битов.",
+    "catalog_empty": "😔 В каталоге пока нет одобренных работ.",
     "filter_intro": "🔎 Настройте фильтр или смотрите всё:",
     "filter_all": "▶️ Смотреть все",
     "filter_setup": "🎚 Настроить фильтр",
@@ -136,17 +136,17 @@ TEXTS = {
     "beat_listen": "▶️ Слушать",
     "beat_buy": "💸 Купить",
     "beat_ask": "💬 Задать вопрос",
-    "beat_ask_prompt": "✍️ Напишите вопрос по биту «{title}» — он уйдёт админу:",
+    "beat_ask_prompt": "✍️ Напишите вопрос по работе «{title}» — он уйдёт админу:",
     "beat_ask_sent": "✅ Вопрос отправлен.",
     "beat_buy_sent": "✅ Заявка на покупку отправлена админу, он свяжется с вами.",
     "mod_beat_question": (
-        "💬 <b>Вопрос по биту</b> «{title}» (id{work_id})\n"
+        "💬 <b>Вопрос по работе</b> «{title}» (id{work_id})\n"
         "От: {contact}\n\n{text}"
     ),
     "mod_beat_buy": (
-        "🛒 <b>Заявка на покупку</b> бита «{title}» (id{work_id})\n"
+        "🛒 <b>Заявка на покупку</b> «{title}» (id{work_id})\n"
         "Клиент: {contact}\nАвтор: {author}\n"
-        "Аренда: {rent} ₽ | Выкуп: {buy} ₽"
+        "{prices}"
     ),
     # --- Биржа заказов ---
     "order_form_start": (

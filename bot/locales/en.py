@@ -109,7 +109,7 @@ TEXTS = {
     ),
     "beat_approved_notify": "✅ Your beat '{title}' is approved and added to the catalog.",
     "beat_rejected_notify": "❌ Your beat '{title}' was rejected by moderation.",
-    "catalog_empty": "😔 No approved beats in the catalog yet.",
+    "catalog_empty": "😔 No approved works in the catalog yet.",
     "filter_intro": "🔎 Set up a filter or browse everything:",
     "filter_all": "▶️ Browse all",
     "filter_setup": "🎚 Set up filter",
@@ -134,13 +134,13 @@ TEXTS = {
     "beat_ask_sent": "✅ Question sent.",
     "beat_buy_sent": "✅ Purchase request sent to the admin, he will contact you.",
     "mod_beat_question": (
-        "💬 <b>Question about beat</b> '{title}' (id{work_id})\n"
+        "💬 <b>Question about work</b> '{title}' (id{work_id})\n"
         "From: {contact}\n\n{text}"
     ),
     "mod_beat_buy": (
-        "🛒 <b>Purchase request</b> for beat '{title}' (id{work_id})\n"
+        "🛒 <b>Purchase request</b> for '{title}' (id{work_id})\n"
         "Client: {contact}\nAuthor: {author}\n"
-        "Rent: {rent} ₽ | Buyout: {buy} ₽"
+        "{prices}"
     ),
     "order_form_start": (
         "📝 Order brief '{title}'. Answer one message at a time.\n"
