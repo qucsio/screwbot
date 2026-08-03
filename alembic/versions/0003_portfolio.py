@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = "0003"
@@ -17,7 +18,11 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-media_type = sa.Enum("photo", "video", "audio", "document", name="mediatype")
+# create_type=False: тип создаём/удаляем ЯВНО (ниже), иначе create_table
+# попытается создать enum повторно без checkfirst → DuplicateObjectError.
+media_type = postgresql.ENUM(
+    "photo", "video", "audio", "document", name="mediatype", create_type=False
+)
 
 
 def upgrade() -> None:

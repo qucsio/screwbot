@@ -46,7 +46,7 @@ CATEGORIES: list[CategoryDef] = [
                 "catalog", catalog_type="beat"),
     CategoryDef(
         "custom_beats", "🎶 Аранжировки и биты на заказ", "🎶 Custom arrangements & beats", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=2,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
             Field("bpm", "BPM:", "BPM:", "BPM"),
@@ -58,7 +58,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "mixing", "🎚️ Mixing", "🎚️ Mixing", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=46,  # ← id топика-тендера в супергруппе
         fields=(
             Field("tracks_count", "Количество дорожек:", "Number of tracks:", "Дорожек"),
             Field("ref_sound", "Референс звучания:", "Reference sound:", "Референс"),
@@ -69,7 +69,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "ghostwriting", "✍️ Текст (призрак-писатель)", "✍️ Lyrics (ghostwriter)", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=4,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
             Field("verses", "Кол-во куплетов/припевов:", "Verses/choruses count:", "Куплеты"),
@@ -83,7 +83,7 @@ CATEGORIES: list[CategoryDef] = [
                 "catalog", catalog_type="visual"),
     CategoryDef(
         "visual", "🖼️ Визуал (на заказ)", "🖼️ Visuals (custom)", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=6,  # ← id топика-тендера в супергруппе
         fields=(
             Field("type", "Тип (обложка, баннер, арт, 3D):", "Type (cover, banner, art, 3D):", "Тип"),
             Field("palette", "Цветовая палитра/стиль:", "Color palette/style:", "Палитра"),
@@ -95,7 +95,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "videographer", "🎥 Видеограф", "🎥 Videographer", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=8,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
             Field("idea", "Идея/сценарий:", "Idea/script:", "Идея"),
@@ -106,7 +106,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "editing", "🎬 Монтаж", "🎬 Video editing", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=50,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
             Field("duration", "Хронометраж:", "Duration:", "Хронометраж"),
@@ -118,7 +118,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "photo", "📸 Фото-сессия", "📸 Photoshoot", "custom",
-        thread_id=0,  # ← id топика-тендера в супергруппе
+        thread_id=53,  # ← id топика-тендера в супергруппе
         fields=(
             Field("city", "Город (укажите свой):", "City (specify yours):", "Город"),
             Field("style", "Стиль съёмки:", "Shooting style:", "Стиль"),
