@@ -13,13 +13,16 @@ async def replace_card(
     text: str,
     kb: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
+    video: str | None = None,
 ) -> None:
-    """Заменяет текущее сообщение карточкой (фото+подпись+кнопки или текст)."""
+    """Заменяет текущее сообщение карточкой (фото/видео+подпись+кнопки или текст)."""
     try:
         await call.message.delete()
     except Exception:
         pass
-    if photo:
+    if video:
+        await call.message.answer_video(video, caption=text, reply_markup=kb)
+    elif photo:
         await call.message.answer_photo(photo, caption=text, reply_markup=kb)
     else:
         await call.message.answer(text, reply_markup=kb)

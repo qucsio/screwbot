@@ -301,6 +301,7 @@ async def adm_creator_add_work(call: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=t("addwork_beat", L), callback_data=f"adm:cworkbeat:{cid}"),
         InlineKeyboardButton(text=t("addwork_visual", L), callback_data=f"adm:cworkvisual:{cid}"),
+        InlineKeyboardButton(text=t("addwork_video", L), callback_data=f"adm:cworkvideo:{cid}"),
     ]])
     await call.message.answer(t("addwork_choose", L), reply_markup=kb)
     await call.answer()
@@ -334,6 +335,20 @@ async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+@router.callback_query(F.data.startswith("adm:cworkvideo:"))
+async def adm_creator_add_video(call: CallbackQuery, state: FSMContext):
+    from bot.handlers.beats import _VIDEO_STEPS
+    from bot.services.forms import cancel_kb, step
+    from bot.states.beats import AddVideo
+
+    cid = int(call.data.split(":")[2])
+    await state.clear()
+    await state.set_state(AddVideo.title)
+    await state.update_data(target_creator_id=cid)
+    await call.message.answer(step(1, _VIDEO_STEPS, "addvideo_title", L), reply_markup=cancel_kb(L))
+    await call.answer()
+
+
 # =========================================================================
 # КАТАЛОГ РАБОТ
 # =========================================================================
@@ -359,8 +374,8 @@ async def adm_works(call: CallbackQuery, session: AsyncSession):
 
 
 def _work_keyboard(work_id: int, has_audio: bool = False, ctype: str = "beat") -> InlineKeyboardMarkup:
-    if ctype == "visual":
-        # у визуала нет аренды/тональности/BPM/аудио — только тип и цена выкупа
+    if ctype in ("visual", "video"):
+        # у визуала/видео нет аренды/тональности/BPM/аудио — только тип и цена выкупа
         rows = [
             [
                 InlineKeyboardButton(text=t("adm_btn_edit_type", L), callback_data=f"adm:wf:genre:{work_id}"),
@@ -388,9 +403,9 @@ def _work_keyboard(work_id: int, has_audio: bool = False, ctype: str = "beat") -
 
 
 def _work_card_content(work, author, ctype: str = "beat") -> tuple[str | None, str, InlineKeyboardMarkup]:
-    if ctype == "visual":
+    if ctype in ("visual", "video"):
         text = t(
-            "adm_work_card_visual", L,
+            "adm_work_card_video" if ctype == "video" else "adm_work_card_visual", L,
             title=work.title, wid=work.id, author=_contact(author),
             vtype=work.genre or "—", buy=_money(work.price_buy),
             status=t(f"status_{work.moderation_status.value}", L),
@@ -413,7 +428,10 @@ async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: i
         return
     ctype = await repo.work_catalog_type(session, pair[0])
     cover, text, kb = _work_card_content(*pair, ctype)
-    await replace_card(call, text, kb, photo=cover)
+    if ctype == "video":
+        await replace_card(call, text, kb, video=cover)
+    else:
+        await replace_card(call, text, kb, photo=cover)
 
 
 async def _refresh_work_card(bot: Bot, session: AsyncSession, data: dict):

@@ -285,6 +285,7 @@ TEXTS = {
     "cancelled": "❌ Cancelled.",
     "addwork_beat": "🎧 Beat",
     "addwork_visual": "🖼 Visual",
+    "addwork_video": "🎬 Video",
     "addwork_only_creator": "⛔ Only approved creators can add works.",
     "addvisual_title": "🖼 Work title:",
     "addvisual_type": "Type (cover / banner / art / logo / 3D):",
@@ -309,4 +310,30 @@ TEXTS = {
         "({pos}/{total})"
     ),
     "filter_type": "Choose a type:",
+    "addvideo_title": "🎬 Work title:",
+    "addvideo_type": "Video type (clip / lyric video / ad / motion):",
+    "addvideo_file": "Send the video file:",
+    "addvideo_file_invalid": "A video is required. Send a video file.",
+    "addvideo_price_buy": "💰 Price (RUB):",
+    "addvideo_sent": "✅ Video sent for moderation.",
+    "mod_new_video": (
+        "🆕 <b>New video for moderation</b>\n\n"
+        "Author: {author}\n"
+        "Title: {title}\n"
+        "Type: {vtype}\n"
+        "Price: {buy} ₽"
+    ),
+    "video_card": (
+        "🎬 <b>{title}</b>\n"
+        "Author: {author}\n"
+        "Type: {vtype}\n"
+        "💰 Price: {buy} ₽\n"
+        "({pos}/{total})"
+    ),
+    "work_detail_video": (
+        "🎬 <b>{title}</b>\n"
+        "Type: {vtype}\n"
+        "💰 Price: {buy} ₽\n"
+        "Status: {status}"
+    ),
 }

@@ -81,6 +81,8 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef("ready_visual", "🖼️ Готовые визуалы", "🖼️ Ready visuals",
                 "catalog", catalog_type="visual"),
+    CategoryDef("ready_video", "🎬 Готовые видео", "🎬 Ready videos",
+                "catalog", catalog_type="video"),
     CategoryDef(
         "visual", "🖼️ Визуал (на заказ)", "🖼️ Visuals (custom)", "custom",
         thread_id=6,  # ← id топика-тендера в супергруппе

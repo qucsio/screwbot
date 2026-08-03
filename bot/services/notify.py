@@ -18,12 +18,15 @@ async def send_work_to_moderation(
     caption: str,
     cover_file_id: str | None,
     markup: InlineKeyboardMarkup | None = None,
+    media_type: str = "photo",
 ) -> None:
-    """Карточка работы на модерацию: обложка+подпись+кнопки в одном сообщении."""
-    if cover_file_id:
-        await bot.send_photo(app_config.ADMIN_ID, cover_file_id, caption=caption, reply_markup=markup)
-    else:
+    """Карточка работы на модерацию: медиа+подпись+кнопки в одном сообщении."""
+    if not cover_file_id:
         await bot.send_message(app_config.ADMIN_ID, caption, reply_markup=markup)
+    elif media_type == "video":
+        await bot.send_video(app_config.ADMIN_ID, cover_file_id, caption=caption, reply_markup=markup)
+    else:
+        await bot.send_photo(app_config.ADMIN_ID, cover_file_id, caption=caption, reply_markup=markup)
 
 
 async def notify_admin(bot: Bot, text: str, markup: InlineKeyboardMarkup | None = None) -> None:

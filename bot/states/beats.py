@@ -19,6 +19,13 @@ class AddVisual(StatesGroup):
     price_buy = State()
 
 
+class AddVideo(StatesGroup):
+    title = State()
+    vtype = State()      # тип видео: клип/лирик/реклама/motion (хранится в Work.genre)
+    video = State()      # сам видеофайл (file_id хранится в Work.cover_file_id)
+    price_buy = State()
+
+
 class BeatFilter(StatesGroup):
     genre = State()
     key = State()

@@ -162,8 +162,8 @@ def _works_keyboard(works, lang) -> InlineKeyboardMarkup:
 
 
 def _work_keyboard(work_id: int, lang, has_audio: bool = False, ctype: str = "beat") -> InlineKeyboardMarkup:
-    if ctype == "visual":
-        # у визуала нет аренды/аудио — только цена выкупа
+    if ctype in ("visual", "video"):
+        # у визуала/видео нет аренды/аудио — только цена выкупа
         rows = [[InlineKeyboardButton(text=t("btn_price_buy", lang), callback_data=f"prof:price:buy:{work_id}")]]
     else:
         rows = [
@@ -180,9 +180,9 @@ def _work_keyboard(work_id: int, lang, has_audio: bool = False, ctype: str = "be
 
 
 def _work_text(work, lang, ctype: str = "beat") -> str:
-    if ctype == "visual":
+    if ctype in ("visual", "video"):
         return t(
-            "work_detail_visual", lang,
+            "work_detail_video" if ctype == "video" else "work_detail_visual", lang,
             title=work.title, vtype=work.genre or "—",
             buy=_money(work.price_buy),
             status=_status_text(work.moderation_status, lang),
@@ -220,7 +220,10 @@ async def open_work(call: CallbackQuery, session: AsyncSession, user: User):
         return
     ctype = await repo.work_catalog_type(session, work)
     kb = _work_keyboard(work.id, user.lang, bool(work.audio_file_id), ctype)
-    await replace_card(call, _work_text(work, user.lang, ctype), kb, photo=work.cover_file_id)
+    if ctype == "video":
+        await replace_card(call, _work_text(work, user.lang, ctype), kb, video=work.cover_file_id)
+    else:
+        await replace_card(call, _work_text(work, user.lang, ctype), kb, photo=work.cover_file_id)
     await call.answer()
 
 

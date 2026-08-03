@@ -269,6 +269,12 @@ TEXTS = {
         "💰 Цена: {buy} ₽\n"
         "Статус: {status}"
     ),
+    "work_detail_video": (
+        "🎬 <b>{title}</b>\n"
+        "Тип: {vtype}\n"
+        "💰 Цена: {buy} ₽\n"
+        "Статус: {status}"
+    ),
     "btn_price_rent": "💸 Цена аренды",
     "btn_price_buy": "💰 Цена выкупа",
     "btn_delete_work": "🗑 Удалить",
@@ -329,6 +335,13 @@ TEXTS = {
         "💰 Цена: {buy} ₽\n"
         "Статус: {status}"
     ),
+    "adm_work_card_video": (
+        "🎬 <b>{title}</b> (#{wid})\n"
+        "Автор: {author}\n"
+        "Тип: {vtype}\n"
+        "💰 Цена: {buy} ₽\n"
+        "Статус: {status}"
+    ),
     "adm_btn_edit_genre": "Жанр",
     "adm_btn_edit_type": "Тип",
     "adm_btn_edit_key": "Тон",
@@ -374,6 +387,7 @@ TEXTS = {
     "cancelled": "❌ Отменено.",
     "addwork_beat": "🎧 Бит",
     "addwork_visual": "🖼 Визуал",
+    "addwork_video": "🎬 Видео",
     "addwork_only_creator": "⛔ Добавлять работы могут только одобренные исполнители.",
     # --- Загрузка визуала ---
     "addvisual_title": "🖼 Название работы:",
@@ -401,4 +415,26 @@ TEXTS = {
         "({pos}/{total})"
     ),
     "filter_type": "Выберите тип:",
+    # --- Загрузка видео ---
+    "addvideo_title": "🎬 Название работы:",
+    "addvideo_type": "Тип видео (клип / лирик-видео / реклама / motion):",
+    "addvideo_file": "Пришлите видеофайл работы:",
+    "addvideo_file_invalid": "Нужно видео. Пришлите видеофайл.\n/cancel — отмена",
+    "addvideo_price_buy": "💰 Цена (руб.):",
+    "addvideo_sent": "✅ Видео отправлено на модерацию.",
+    "mod_new_video": (
+        "🆕 <b>Новое видео на модерацию</b>\n\n"
+        "Автор: {author}\n"
+        "Название: {title}\n"
+        "Тип: {vtype}\n"
+        "Цена: {buy} ₽"
+    ),
+    # --- Карточка видео в каталоге ---
+    "video_card": (
+        "🎬 <b>{title}</b>\n"
+        "Автор: {author}\n"
+        "Тип: {vtype}\n"
+        "💰 Цена: {buy} ₽\n"
+        "({pos}/{total})"
+    ),
 }
