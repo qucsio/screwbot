@@ -13,9 +13,11 @@ from bot.db.models import Lang, Order, OrderStatus, User
 from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_approved_creator
 from bot.locales import t
-from bot.services.money import parse_money
+from bot.services.forms import cancel_kb
+from bot.services.media import send_attachments
+from bot.services.money import fmt_money, parse_money
 from bot.services.notify import safe_send
-from bot.services.order_view import render_order_card
+from bot.services.order_view import attachments_of, render_order_card, status_label, tender_text
 from bot.states.orders import AdminPayout
 
 router = Router()
@@ -26,10 +28,10 @@ router = Router()
 # =========================================================================
 
 
-def _list_keyboard(orders, lang: Lang) -> InlineKeyboardMarkup:
+def _list_keyboard(orders, lang: Lang, viewer: str) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
-            text=f"#{o.id} · {t(f'ostatus_{o.status.value}', lang)}",
+            text=f"#{o.id} · {status_label(o.status, viewer, lang)}",
             callback_data=f"ord:open:{o.id}",
         )]
         for o in orders
@@ -50,12 +52,13 @@ async def open_orders(
     message: Message, state: FSMContext, session: AsyncSession, user: User, as_creator: bool = False
 ):
     """Вход из меню: клиентские «Мои заказы» или исполнительские «Заказы в работе»."""
-    await state.update_data(orders_scope="creator" if as_creator else "client")
+    viewer = "creator" if as_creator else "client"
+    await state.update_data(orders_scope=viewer)
     orders, title_key = await _load_orders(session, user, as_creator)
     if not orders:
         await message.answer(t("hub_orders_empty", user.lang))
         return
-    await message.answer(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang))
+    await message.answer(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang, viewer))
 
 
 def _viewer_for_order(user: User, order, creator_user) -> str | None:
@@ -84,7 +87,8 @@ async def back_to_list(call: CallbackQuery, state: FSMContext, session: AsyncSes
     if not orders:
         await call.message.edit_text(t("hub_orders_empty", user.lang))
     else:
-        await call.message.edit_text(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang))
+        viewer = "creator" if as_creator else "client"
+        await call.message.edit_text(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang, viewer))
     await call.answer()
 
 
@@ -206,16 +210,23 @@ async def approve_demo(call: CallbackQuery, session: AsyncSession, user: User, b
     await call.answer()
 
 
+# «Я оплатил» — и для предоплаты, и для финальной оплаты: админу сигнал проверить платёж.
+_PAID_NOTIFY = {
+    OrderStatus.await_prepay: "notify_prepaid_admin",
+    OrderStatus.await_final: "notify_paid_admin",
+}
+
+
 @router.callback_query(F.data.startswith("ord:paid:"))
 async def client_paid(call: CallbackQuery, session: AsyncSession, user: User, bot: Bot):
     order_id = int(call.data.split(":")[2])
     bundle = await repo.get_full(session, order_id)
     order, client, category, creator_user = bundle
-    if order.status != OrderStatus.await_final or order.client_id != user.id:
+    if order.status not in _PAID_NOTIFY or order.client_id != user.id:
         await call.answer()
         return
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
-    await safe_send(bot.send_message(app_config.ADMIN_ID, t("notify_paid_admin", Lang.ru, order_id=order_id)))
+    await safe_send(bot.send_message(app_config.ADMIN_ID, t(_PAID_NOTIFY[order.status], Lang.ru, order_id=order_id)))
     # Убираем кнопку, чтобы клиент не слал повторные пинги админу.
     try:
         await call.message.edit_reply_markup(reply_markup=None)
@@ -238,7 +249,7 @@ async def admin_final(call: CallbackQuery, state: FSMContext, session: AsyncSess
     await state.set_state(AdminPayout.amount)
     # Карточку запоминаем, чтобы после выплаты убрать с неё кнопку подтверждения.
     await state.update_data(order_id=order_id, card_chat=call.message.chat.id, card_msg=call.message.message_id)
-    await call.message.answer(t("admin_enter_payout", Lang.ru, order_id=order_id))
+    await call.message.answer(t("admin_enter_payout", Lang.ru, order_id=order_id), reply_markup=cancel_kb(Lang.ru))
     await call.answer()
 
 
@@ -264,7 +275,7 @@ async def admin_payout(message: Message, state: FSMContext, session: AsyncSessio
         creator_user_obj = creator_user[1]
         await safe_send(bot.send_message(
             creator_user_obj.tg_id,
-            t("creator_balance_credited", creator_user_obj.lang, order_id=order_id, amount=amount)
+            t("creator_balance_credited", creator_user_obj.lang, order_id=order_id, amount=fmt_money(amount))
             + t("review_upload_hint", creator_user_obj.lang),
         ))
     await safe_send(bot.send_message(client.tg_id, t("client_order_completed", client.lang, order_id=order_id)))
@@ -274,7 +285,7 @@ async def admin_payout(message: Message, state: FSMContext, session: AsyncSessio
         await safe_send(bot.edit_message_text(
             text, chat_id=data["card_chat"], message_id=data["card_msg"], reply_markup=kb,
         ))
-    await message.answer(t("admin_final_done", Lang.ru, order_id=order_id, amount=amount))
+    await message.answer(t("admin_final_done", Lang.ru, order_id=order_id, amount=fmt_money(amount)))
 
 
 @router.callback_query(F.data.startswith("ord:cancel:"))
@@ -291,11 +302,36 @@ async def cancel_order(call: CallbackQuery, session: AsyncSession, user: User, b
     await session.commit()
     bundle = await repo.get_full(session, order_id)
 
+    # Пост-тендер в группе помечаем отменённым и убираем «Взять заказ».
+    if order.tender_message_id:
+        await safe_send(bot.edit_message_text(
+            tender_text(order, category, client) + t("tender_cancelled_mark", Lang.ru),
+            chat_id=app_config.GROUP_ID, message_id=order.tender_message_id,
+        ))
+
     await _refresh(call, bundle, "client", user.lang)
     if prev_creator:
         await safe_send(bot.send_message(prev_creator[1].tg_id,
                                          t("order_cancelled_client", prev_creator[1].lang, order_id=order_id)))
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("ord:att:"))
+async def send_order_attachments(call: CallbackQuery, session: AsyncSession, user: User | None, bot: Bot):
+    """Вложения ТЗ в личку — участникам заказа и админу (в карточке видно только их число)."""
+    order_id = int(call.data.split(":")[2])
+    bundle = await repo.get_full(session, order_id) if user else None
+    if bundle is None:
+        await call.answer()
+        return
+    order, client, category, creator_user = bundle
+    if _viewer_for_order(user, order, creator_user) is None and call.from_user.id != app_config.ADMIN_ID:
+        await call.answer()
+        return
+    attachments = attachments_of(order)
+    if attachments:
+        await send_attachments(bot, call.from_user.id, attachments)
     await call.answer()
 
 

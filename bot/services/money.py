@@ -24,3 +24,14 @@ def parse_money(text: str | None, allow_zero: bool = False) -> Decimal | None:
     if amount == 0 and not allow_zero:
         return None
     return amount
+
+
+def fmt_money(value) -> str:
+    """Сумма для показа: 5000 → «5 000», 1500.5 → «1 500.50», None → «—»."""
+    if value is None:
+        return "—"
+    amount = Decimal(str(value))
+    if not amount.is_finite():  # записи, сохранённые до проверки NaN
+        return "—"
+    text = f"{amount.quantize(Decimal('0.01')):,.2f}".replace(",", " ")
+    return text[:-3] if text.endswith(".00") else text

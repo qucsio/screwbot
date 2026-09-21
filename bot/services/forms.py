@@ -13,12 +13,14 @@
         return
 """
 from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    ReplyKeyboardMarkup,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +34,16 @@ def cancel_kb(lang: Lang) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t("form_cancel", lang), callback_data="form_cancel")]
+        ]
+    )
+
+
+def skip_kb(lang: Lang, skip_data: str) -> InlineKeyboardMarkup:
+    """«Пропустить» + «Отмена» для необязательного шага (вместо «наберите -»)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t("form_skip", lang), callback_data=skip_data)],
+            [InlineKeyboardButton(text=t("form_cancel", lang), callback_data="form_cancel")],
         ]
     )
 
@@ -79,21 +91,33 @@ async def read_text(
     return value
 
 
+async def _menu_after_cancel(session: AsyncSession, user: User | None) -> ReplyKeyboardMarkup | None:
+    from bot.db.models import CreatorStatus
+    from bot.db.repositories.works import get_creator
+    from bot.keyboards.common import creator_panel, main_menu
+
+    if not (user and user.role):
+        return None
+    creator = await get_creator(session, user.id)
+    status = creator.status if creator else None
+    # Одобренный исполнитель возвращается в свою панель, остальные — в главное меню.
+    return creator_panel(user.lang) if status == CreatorStatus.approved else main_menu(user.lang, status)
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext, session: AsyncSession, user: User | None):
+    """/cancel в любом состоянии. Роутер подключён раньше админского — иначе
+    в админских вводах «/cancel» принимался бы за сумму или новое значение поля."""
+    await state.clear()
+    lang = user.lang if user else Lang.ru
+    await message.answer(t("cancelled", lang), reply_markup=await _menu_after_cancel(session, user))
+
+
 @router.callback_query(F.data == "form_cancel")
 async def form_cancel(
     call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User | None
 ):
     await state.clear()
-    from bot.db.models import CreatorStatus
-    from bot.db.repositories.works import get_creator
-    from bot.keyboards.common import creator_panel, main_menu
-
     lang = user.lang if user else Lang.ru
-    markup = None
-    if user and user.role:
-        creator = await get_creator(session, user.id)
-        status = creator.status if creator else None
-        # Одобренный исполнитель возвращается в свою панель, остальные — в главное меню.
-        markup = creator_panel(lang) if status == CreatorStatus.approved else main_menu(lang, status)
-    await call.message.answer(t("cancelled", lang), reply_markup=markup)
+    await call.message.answer(t("cancelled", lang), reply_markup=await _menu_after_cancel(session, user))
     await call.answer()

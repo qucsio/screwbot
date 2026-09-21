@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.db.models import Category, Creator, Order, OrderStatus, User
 
 # Статусы, которые показываем в «Мои заказы» (активные + недавно завершённые).
+# published — тоже: иначе сразу после отправки ТЗ клиент видел «заказов нет»
+# и не мог отменить заказ, который никто не взял. Исполнителю published не
+# попадёт — у такого заказа ещё нет creator_id.
 VISIBLE_STATUSES = [
+    OrderStatus.published,
     OrderStatus.taken,
     OrderStatus.await_prepay,
     OrderStatus.in_progress,

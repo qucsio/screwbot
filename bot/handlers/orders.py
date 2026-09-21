@@ -11,8 +11,9 @@ from bot.db.repositories.works import get_approved_creator, get_category_by_code
 from bot.keyboards.orders import take_order_keyboard
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text, step_text
+from bot.services.media import MAX_ATTACHMENTS, detect_attachment, send_attachments
 from bot.services.notify import safe_send
-from bot.services.order_view import brief_text, contact, render_order_card
+from bot.services.order_view import contact, render_order_card, tender_text
 from bot.services.text import BRIEF_FIELD_MAX
 from bot.states.orders import OrderForm
 
@@ -86,16 +87,19 @@ def _attach_done_kb(lang: Lang):
 
 @router.message(OrderForm.attachments)
 async def order_attachment(message: Message, state: FSMContext, user: User):
-    from bot.handlers.portfolio import detect_media
-
-    found = detect_media(message)
+    # голосовые и кружки тоже годятся — клиенту часто проще надиктовать
+    found = detect_attachment(message)
     if found is None:
         await message.answer(t("order_attach_need_media", user.lang), reply_markup=_attach_done_kb(user.lang))
         return
-    media_type, file_id = found
     data = await state.get_data()
     attachments = data.get("attachments", [])
-    attachments.append({"type": media_type.value, "file_id": file_id})
+    if len(attachments) >= MAX_ATTACHMENTS:
+        await message.answer(
+            t("order_attach_limit", user.lang, limit=MAX_ATTACHMENTS), reply_markup=_attach_done_kb(user.lang),
+        )
+        return
+    attachments.append(found)
     await state.update_data(attachments=attachments)
     await message.answer(
         t("order_attach_added", user.lang, count=len(attachments)),
@@ -128,39 +132,23 @@ async def order_attachments_done(call: CallbackQuery, state: FSMContext, session
 
 
 async def publish_tender(bot: Bot, session: AsyncSession, order: Order, category: Category, client: User):
-    text = t(
-        "tender_card", Lang.ru,
-        title=category.title_ru, order_id=order.id,
-        contact=contact(client), body=brief_text(category.code, order.brief),
-    )
     sent = await bot.send_message(
         app_config.GROUP_ID,
-        text,
+        tender_text(order, category, client),
         message_thread_id=category.thread_id,
         reply_markup=take_order_keyboard(Lang.ru, order.id),
     )
     order.tender_message_id = sent.message_id
     await session.commit()
 
-    # Вложения клиента (изображения/файлы) — отдельными сообщениями в тот же топик.
-    for att in (order.brief.get("_attachments") or []):
-        try:
-            await _send_attachment(bot, category.thread_id, att)
-        except Exception:
-            pass
-
-
-async def _send_attachment(bot: Bot, thread_id: int, att: dict) -> None:
-    kind, file_id = att.get("type"), att.get("file_id")
-    kwargs = {"message_thread_id": thread_id}
-    if kind == "photo":
-        await bot.send_photo(app_config.GROUP_ID, file_id, **kwargs)
-    elif kind == "video":
-        await bot.send_video(app_config.GROUP_ID, file_id, **kwargs)
-    elif kind == "audio":
-        await bot.send_audio(app_config.GROUP_ID, file_id, **kwargs)
-    else:
-        await bot.send_document(app_config.GROUP_ID, file_id, **kwargs)
+    # Вложения — альбомами и ответом на пост-тендер: в топике с несколькими
+    # заказами они больше не перемешиваются с чужими.
+    attachments = (order.brief or {}).get("_attachments") or []
+    if attachments:
+        await send_attachments(
+            bot, app_config.GROUP_ID, attachments,
+            thread_id=category.thread_id, reply_to=sent.message_id,
+        )
 
 
 # =========================================================================
@@ -172,7 +160,8 @@ async def _send_attachment(bot: Bot, thread_id: int, att: dict) -> None:
 async def take_order(call: CallbackQuery, session: AsyncSession, user: User | None, bot: Bot):
     order_id = int(call.data.split(":")[1])
     if user is None:
-        await call.answer()
+        # участник группы, ни разу не запускавший бота: раньше кнопка молча не работала
+        await call.answer(t("order_take_need_start", Lang.ru), show_alert=True)
         return
     creator = await get_approved_creator(session, user.id)
     if creator is None:
@@ -197,5 +186,8 @@ async def take_order(call: CallbackQuery, session: AsyncSession, user: User | No
     order, client, category, creator_user = bundle
     text, kb = render_order_card(order, client, category, creator_user, "client", client.lang)
     await safe_send(bot.send_message(client.tg_id, text, reply_markup=kb))
+    # исполнителю — карточка в личку: всплывашка в группе исчезает через пару секунд
+    text, kb = render_order_card(order, client, category, creator_user, "creator", user.lang)
+    await safe_send(bot.send_message(user.tg_id, text, reply_markup=kb))
 
     await call.answer(t("order_taken_ok", user.lang, order_id=order_id))

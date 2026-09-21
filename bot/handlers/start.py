@@ -1,5 +1,5 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
@@ -14,13 +14,19 @@ from bot.db.repositories.works import get_creator
 from bot.keyboards.common import (
     lang_keyboard,
     main_menu,
-    moderation_keyboard,
     settings_lang_keyboard,
 )
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text, read_text, step
-from bot.services.notify import send_to_moderation
-from bot.services.text import EXPERIENCE_MAX, PORTFOLIO_LINKS_MAX, esc
+from bot.services.forms import cancel_kb, read_text, step
+from bot.services.media import detect_media
+from bot.services.moderation import send_creator_card
+from bot.services.text import (
+    EXPERIENCE_MAX,
+    NICKNAME_MAX,
+    PORTFOLIO_LINKS_MAX,
+    SERVICE_MAX,
+    esc,
+)
 from bot.states.registration import CreatorApplication, Registration
 
 router = Router()
@@ -49,15 +55,10 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession, 
     await message.answer(t("choose_lang"), reply_markup=lang_keyboard())
 
 
-@router.message(Command("cancel"))
-async def cmd_cancel(message: Message, state: FSMContext, session: AsyncSession, user: User | None):
-    """Универсальная отмена любого пошагового процесса."""
-    await state.clear()
-    if user and user.role:
-        status = await _creator_status(session, user)
-        await message.answer(t("cancelled", user.lang), reply_markup=main_menu(user.lang, status))
-    else:
-        await message.answer(t("cancelled", user.lang if user else Lang.ru))
+@router.message(Registration.lang)
+async def lang_expected(message: Message):
+    """Вместо нажатия кнопки языка прислали текст — показываем выбор ещё раз."""
+    await message.answer(t("choose_lang"), reply_markup=lang_keyboard())
 
 
 @router.callback_query(Registration.lang, F.data.startswith("lang:"))
@@ -83,11 +84,10 @@ async def choose_lang(
 
 @router.message(Registration.nickname)
 async def set_nickname(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    nickname = guard_text(message)
+    nickname = await read_text(message, user.lang, NICKNAME_MAX)
     if nickname is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    user.nickname = nickname[:64]
+    user.nickname = nickname
     user.role = Role.client  # маркер завершённой регистрации; все — клиенты
     await session.commit()
     await state.clear()
@@ -126,6 +126,10 @@ async def start_creator_application(
     if creator is not None:
         if creator.status == CreatorStatus.approved:
             await message.answer(t("creator_already_approved", user.lang))
+        elif creator.status == CreatorStatus.blocked:
+            # раньше тут отвечали «заявка на рассмотрении» — неправда для отклонённых
+            await message.answer(t("creator_blocked_info", user.lang),
+                                 reply_markup=main_menu(user.lang, creator.status))
         else:
             await message.answer(t("application_pending_info", user.lang))
         return
@@ -140,11 +144,10 @@ async def start_creator_application(
 
 @router.message(CreatorApplication.service)
 async def app_service(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, SERVICE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(service=value[:128])
+    await state.update_data(service=value)
     await state.set_state(CreatorApplication.experience)
     await message.answer(step(2, _APP_STEPS, "creator_ask_experience", user.lang), reply_markup=cancel_kb(user.lang))
 
@@ -167,19 +170,6 @@ def _app_media_kb(lang: Lang) -> InlineKeyboardMarkup:
     )
 
 
-async def _send_mod_card(bot: Bot, user: User, creator: Creator) -> None:
-    contact = f"@{user.username}" if user.username else f"id{user.tg_id}"
-    card = t(
-        "mod_new_creator", Lang.ru,
-        contact=contact,
-        nickname=esc(user.nickname),
-        service=esc(creator.service),
-        experience=esc(creator.experience, limit=EXPERIENCE_MAX),
-        portfolio=esc(creator.portfolio, limit=PORTFOLIO_LINKS_MAX),
-    )
-    await send_to_moderation(bot, card, moderation_keyboard(Lang.ru, creator.id))
-
-
 @router.message(CreatorApplication.portfolio)
 async def app_portfolio(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
@@ -200,7 +190,7 @@ async def app_portfolio(
 
     # Заявка уже валидна — сразу шлём карточку админу (медиа он видит по кнопке «live»).
     await message.answer(t("creator_application_sent", user.lang))
-    await _send_mod_card(bot, user, creator)
+    await send_creator_card(bot, user, creator)
 
     # Необязательный цикл: добавить медиа в портфолио прямо сейчас.
     await state.set_state(CreatorApplication.portfolio_media)
@@ -211,7 +201,6 @@ async def app_portfolio(
 @router.message(CreatorApplication.portfolio_media)
 async def app_portfolio_media(message: Message, state: FSMContext, session: AsyncSession, user: User):
     from bot.db.repositories import portfolio as pf_repo
-    from bot.handlers.portfolio import detect_media
 
     found = detect_media(message)
     if found is None:

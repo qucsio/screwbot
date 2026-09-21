@@ -1,5 +1,3 @@
-from decimal import Decimal, InvalidOperation
-
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -16,15 +14,13 @@ from bot.db.repositories import portfolio as portfolio_repo
 from bot.db.repositories import works as repo
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text
+from bot.services.money import fmt_money as _money
+from bot.services.money import parse_money
 from bot.services.text import EXPERIENCE_MAX, SOCIALS_MAX, esc
 from bot.services.ui import replace_card
 from bot.states.profile import ProfileEdit
 
 router = Router()
-
-
-def _money(v) -> str:
-    return f"{v:g}" if v is not None else "—"
 
 
 def _status_text(status: ModerationStatus, lang) -> str:
@@ -227,6 +223,26 @@ async def open_work(call: CallbackQuery, session: AsyncSession, user: User):
 
 
 @router.callback_query(F.data.startswith("prof:del:"))
+async def delete_work_ask(call: CallbackQuery, session: AsyncSession, user: User):
+    """Удаление необратимо — сначала подтверждение прямо на карточке работы."""
+    work_id = int(call.data.split(":")[2])
+    creator = await _get_creator(session, user)
+    work = await repo.get_creator_work(session, work_id, creator.id) if creator else None
+    if work is None:
+        await call.answer()
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t("btn_delete_work_yes", user.lang), callback_data=f"prof:delok:{work.id}")],
+        [InlineKeyboardButton(text=t("back", user.lang), callback_data=f"prof:work:{work.id}")],
+    ])
+    try:
+        await call.message.edit_reply_markup(reply_markup=kb)
+    except Exception:
+        pass
+    await call.answer(t("work_delete_confirm", user.lang))
+
+
+@router.callback_query(F.data.startswith("prof:delok:"))
 async def delete_work(call: CallbackQuery, session: AsyncSession, user: User):
     work_id = int(call.data.split(":")[2])
     creator = await _get_creator(session, user)
@@ -263,10 +279,8 @@ async def ask_price(call: CallbackQuery, state: FSMContext, session: AsyncSessio
 
 @router.message(ProfileEdit.price)
 async def save_price(message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
-    raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
-    try:
-        price = Decimal(raw)
-    except InvalidOperation:
+    price = parse_money(message.text, allow_zero=True)
+    if price is None:
         await message.answer(t("work_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
     data = await state.get_data()

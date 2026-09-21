@@ -147,6 +147,9 @@ class Work(Base):
     title: Mapped[str] = mapped_column(String(128))
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
     audio_file_id: Mapped[str | None] = mapped_column(String(256))
+    # как пришёл звук: "audio" | "document" (WAV обычно приходит файлом);
+    # отправлять надо тем же методом. NULL — старые записи, это "audio".
+    audio_kind: Mapped[str | None] = mapped_column(String(16))
 
     # теги (для битов)
     genre: Mapped[str | None] = mapped_column(String(64))

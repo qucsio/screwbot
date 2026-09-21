@@ -105,7 +105,7 @@ async def review_nav(call: CallbackQuery, state: FSMContext, user: User):
     data = await state.get_data()
     photos = data.get("rev_ids") or []
     if not photos:
-        await call.answer()
+        await call.answer(t("button_outdated", user.lang))
         return
     idx = data.get("rev_idx", 0)
     idx = (idx + (1 if call.data.endswith("next") else -1)) % len(photos)

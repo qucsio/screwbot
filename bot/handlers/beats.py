@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto, InputMediaVideo, Message
@@ -14,17 +16,22 @@ from bot.keyboards.common import (
     filter_intro_keyboard,
     genre_keyboard,
     work_card_keyboard,
-    work_moderation_keyboard,
 )
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text, read_text, step
-from bot.services.notify import notify_admin, send_work_to_moderation
-from bot.services.text import QUESTION_MAX, esc
+from bot.services.forms import cancel_kb, guard_text, read_text, skip_kb, step
+from bot.services.media import detect_audio, send_work_audio
+from bot.services.moderation import send_work_card
+from bot.services.money import fmt_money, parse_money
+from bot.services.notify import notify_admin
+from bot.services.order_view import contact
+from bot.services.text import GENRE_MAX, KEY_MAX, QUESTION_MAX, TITLE_MAX, esc
 from bot.states.beats import AddBeat, AddVideo, AddVisual, BeatFilter
 
 _BEAT_STEPS = 8
 _VISUAL_STEPS = 4
 _VIDEO_STEPS = 4
+# Пределы темпа: отсекают опечатки вроде «0» или «14000».
+BPM_MIN, BPM_MAX = 1, 999
 
 router = Router()
 
@@ -41,11 +48,16 @@ class BeatQuestion(StatesGroup):
 
 
 def _contact(user: User) -> str:
+    """Автор в публичной карточке каталога."""
     return f"@{user.username}" if user.username else f"id{user.tg_id}"
 
 
-def _money(v) -> str:
-    return f"{v:g}" if v is not None else "—"
+def parse_bpm(text: str | None) -> int | None:
+    raw = (text or "").strip()
+    if not raw.isdigit():
+        return None
+    bpm = int(raw)
+    return bpm if BPM_MIN <= bpm <= BPM_MAX else None
 
 
 # =========================================================================
@@ -70,43 +82,41 @@ async def addbeat_start(
 
 @router.message(AddBeat.title)
 async def addbeat_title(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, TITLE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(title=value[:128])
+    await state.update_data(title=value)
     await state.set_state(AddBeat.genre)
     await message.answer(step(2, _BEAT_STEPS, "addbeat_genre", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.genre)
 async def addbeat_genre(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, GENRE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(genre=value[:64])
+    await state.update_data(genre=value)
     await state.set_state(AddBeat.key)
     await message.answer(step(3, _BEAT_STEPS, "addbeat_key", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.key)
 async def addbeat_key(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, KEY_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(key=value[:16])
+    await state.update_data(key=value)
     await state.set_state(AddBeat.bpm)
     await message.answer(step(4, _BEAT_STEPS, "addbeat_bpm", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddBeat.bpm)
 async def addbeat_bpm(message: Message, state: FSMContext, user: User):
-    if not (message.text or "").strip().isdigit():
+    bpm = parse_bpm(message.text)
+    if bpm is None:
         await message.answer(t("addbeat_bpm_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(bpm=int(message.text.strip()))
+    await state.update_data(bpm=bpm)
     await state.set_state(AddBeat.cover)
     await message.answer(step(5, _BEAT_STEPS, "addbeat_cover", user.lang), reply_markup=cancel_kb(user.lang))
 
@@ -123,26 +133,27 @@ async def addbeat_cover_invalid(message: Message, user: User):
     await message.answer(t("addbeat_cover_invalid", user.lang), reply_markup=cancel_kb(user.lang))
 
 
-@router.message(AddBeat.audio, F.audio | F.voice | F.document)
+@router.message(AddBeat.audio)
 async def addbeat_audio(message: Message, state: FSMContext, user: User):
-    file = message.audio or message.voice or message.document
-    await state.update_data(audio_file_id=file.file_id)
+    # Только аудио: голосовое или PDF раньше принимались, а потом «Слушать» падала.
+    found = detect_audio(message)
+    if found is None:
+        await message.answer(t("addbeat_audio_invalid", user.lang), reply_markup=cancel_kb(user.lang))
+        return
+    kind, file_id = found
+    await state.update_data(audio_file_id=file_id, audio_kind=kind)
     await state.set_state(AddBeat.price_rent)
     await message.answer(step(7, _BEAT_STEPS, "addbeat_price_rent", user.lang), reply_markup=cancel_kb(user.lang))
 
 
-@router.message(AddBeat.audio)
-async def addbeat_audio_invalid(message: Message, user: User):
-    await message.answer(t("addbeat_audio_invalid", user.lang), reply_markup=cancel_kb(user.lang))
-
-
 @router.message(AddBeat.price_rent)
 async def addbeat_price_rent(message: Message, state: FSMContext, user: User):
-    price = _parse_price(message.text)
+    price = parse_money(message.text, allow_zero=True)
     if price is None:
         await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(price_rent=price)
+    # Данные формы лежат в Redis как JSON — Decimal туда не пройдёт, храним строкой.
+    await state.update_data(price_rent=str(price))
     await state.set_state(AddBeat.price_buy)
     await message.answer(step(8, _BEAT_STEPS, "addbeat_price_buy", user.lang), reply_markup=cancel_kb(user.lang))
 
@@ -151,7 +162,7 @@ async def addbeat_price_rent(message: Message, state: FSMContext, user: User):
 async def addbeat_price_buy(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
 ):
-    price = _parse_price(message.text)
+    price = parse_money(message.text, allow_zero=True)
     if price is None:
         await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
@@ -168,10 +179,11 @@ async def addbeat_price_buy(
         title=data["title"],
         cover_file_id=data["cover_file_id"],
         audio_file_id=data["audio_file_id"],
+        audio_kind=data.get("audio_kind"),
         genre=data["genre"],
         key=data["key"],
         bpm=data["bpm"],
-        price_rent=data["price_rent"],
+        price_rent=Decimal(str(data["price_rent"])),
         price_buy=price,
         moderation_status=ModerationStatus.approved if direct else ModerationStatus.pending,
     )
@@ -184,16 +196,7 @@ async def addbeat_price_buy(
         return
 
     await message.answer(t("addbeat_sent", user.lang))
-    card = t(
-        "mod_new_beat", Lang.ru,
-        author=_contact(user), title=esc(work.title),
-        genre=esc(work.genre), key=esc(work.key), bpm=work.bpm,
-        rent=_money(work.price_rent), buy=_money(work.price_buy),
-    )
-    await send_work_to_moderation(
-        bot, card, work.cover_file_id,
-        work_moderation_keyboard(Lang.ru, work.id, creator.id, has_audio=bool(work.audio_file_id)),
-    )
+    await send_work_card(bot, work, user, "beat")
 
 
 async def _resolve_creator(session: AsyncSession, data: dict, user: User):
@@ -202,16 +205,6 @@ async def _resolve_creator(session: AsyncSession, data: dict, user: User):
     if target:
         return await session.get(Creator, target), True
     return await repo.get_approved_creator(session, user.id), False
-
-
-def _parse_price(text: str | None):
-    if not text:
-        return None
-    cleaned = text.strip().replace(" ", "").replace(",", ".")
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
 
 
 # =========================================================================
@@ -270,22 +263,20 @@ async def add_work_visual(call: CallbackQuery, state: FSMContext, session: Async
 
 @router.message(AddVisual.title)
 async def addvisual_title(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, TITLE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(title=value[:128])
+    await state.update_data(title=value)
     await state.set_state(AddVisual.vtype)
     await message.answer(step(2, _VISUAL_STEPS, "addvisual_type", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVisual.vtype)
 async def addvisual_type(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, GENRE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(vtype=value[:64])
+    await state.update_data(vtype=value)
     await state.set_state(AddVisual.cover)
     await message.answer(step(3, _VISUAL_STEPS, "addvisual_cover", user.lang), reply_markup=cancel_kb(user.lang))
 
@@ -306,7 +297,7 @@ async def addvisual_cover_invalid(message: Message, user: User):
 async def addvisual_price_buy(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
 ):
-    price = _parse_price(message.text)
+    price = parse_money(message.text, allow_zero=True)
     if price is None:
         await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
@@ -335,15 +326,7 @@ async def addvisual_price_buy(
         return
 
     await message.answer(t("addvisual_sent", user.lang))
-    card = t(
-        "mod_new_visual", Lang.ru,
-        author=_contact(user), title=esc(work.title),
-        vtype=esc(work.genre), buy=_money(work.price_buy),
-    )
-    await send_work_to_moderation(
-        bot, card, work.cover_file_id,
-        work_moderation_keyboard(Lang.ru, work.id, creator.id),
-    )
+    await send_work_card(bot, work, user, "visual")
 
 
 # =========================================================================
@@ -365,22 +348,20 @@ async def add_work_video(call: CallbackQuery, state: FSMContext, session: AsyncS
 
 @router.message(AddVideo.title)
 async def addvideo_title(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, TITLE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(title=value[:128])
+    await state.update_data(title=value)
     await state.set_state(AddVideo.vtype)
     await message.answer(step(2, _VIDEO_STEPS, "addvideo_type", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 @router.message(AddVideo.vtype)
 async def addvideo_type(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, GENRE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
-    await state.update_data(vtype=value[:64])
+    await state.update_data(vtype=value)
     await state.set_state(AddVideo.video)
     await message.answer(step(3, _VIDEO_STEPS, "addvideo_file", user.lang), reply_markup=cancel_kb(user.lang))
 
@@ -401,7 +382,7 @@ async def addvideo_file_invalid(message: Message, user: User):
 async def addvideo_price_buy(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
 ):
-    price = _parse_price(message.text)
+    price = parse_money(message.text, allow_zero=True)
     if price is None:
         await message.answer(t("addbeat_price_invalid", user.lang), reply_markup=cancel_kb(user.lang))
         return
@@ -430,16 +411,7 @@ async def addvideo_price_buy(
         return
 
     await message.answer(t("addvideo_sent", user.lang))
-    card = t(
-        "mod_new_video", Lang.ru,
-        author=_contact(user), title=esc(work.title),
-        vtype=esc(work.genre), buy=_money(work.price_buy),
-    )
-    await send_work_to_moderation(
-        bot, card, work.cover_file_id,
-        work_moderation_keyboard(Lang.ru, work.id, creator.id),
-        media_type="video",
-    )
+    await send_work_card(bot, work, user, "video")
 
 
 # =========================================================================
@@ -510,7 +482,14 @@ async def open_catalog(
 @router.callback_query(F.data == "beatflt:all")
 async def filter_all(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
     data = await state.get_data()
+    if "category_id" not in data:
+        # кнопка из старого сообщения: каталог с тех пор закрыт (раньше тут падало)
+        await call.answer(t("button_outdated", user.lang))
+        return
     ids = await repo.filter_beats(session, data["category_id"])
+    if not ids:
+        await call.answer(t("catalog_empty", user.lang), show_alert=True)
+        return
     await _start_carousel(call, state, session, user, ids)
     await call.answer()
 
@@ -518,6 +497,9 @@ async def filter_all(call: CallbackQuery, state: FSMContext, session: AsyncSessi
 @router.callback_query(F.data == "beatflt:setup")
 async def filter_setup(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
     data = await state.get_data()
+    if "category_id" not in data:
+        await call.answer(t("button_outdated", user.lang))
+        return
     genres = await repo.approved_beat_genres(session, data["category_id"])
     single_field = data.get("ctype") in _SINGLE_FIELD_TYPES
     await state.set_state(BeatFilter.genre)
@@ -543,49 +525,73 @@ async def filter_pick_genre(call: CallbackQuery, state: FSMContext, session: Asy
             return
         genre = genres[idx]
     await state.update_data(f_genre=genre)
-    data = await state.get_data()
     # у визуалов и видео фильтр только по типу — сразу показываем результаты
     if data.get("ctype") in _SINGLE_FIELD_TYPES:
-        ids = await repo.filter_beats(session, data["category_id"], genre=data.get("f_genre"))
-        if not ids:
-            await state.set_state(None)
-            await call.message.edit_text(t("filter_no_results", user.lang))
-        else:
-            await _start_carousel(call, state, session, user, ids)
+        await _run_filter(call.message, state, session, user, None, None)
         await call.answer()
         return
     await state.set_state(BeatFilter.key)
-    await call.message.edit_text(t("filter_key", user.lang))
+    await call.message.edit_text(t("filter_key", user.lang), reply_markup=skip_kb(user.lang, "fltskip"))
     await call.answer()
 
 
 @router.message(BeatFilter.key)
 async def filter_key(message: Message, state: FSMContext, user: User):
-    val = guard_text(message)
+    val = await read_text(message, user.lang, KEY_MAX)
     if val is None:
-        await message.answer(t("need_text", user.lang))
         return
-    await state.update_data(f_key=None if val == "-" else val[:16])
+    await state.update_data(f_key=None if val == "-" else val)
+    await _ask_bpm(message, state, user)
+
+
+async def _ask_bpm(target: Message, state: FSMContext, user: User) -> None:
     await state.set_state(BeatFilter.bpm)
-    await message.answer(t("filter_bpm", user.lang))
+    await target.answer(t("filter_bpm", user.lang), reply_markup=skip_kb(user.lang, "fltskip"))
+
+
+def _parse_bpm_range(val: str | None) -> tuple[int | None, int | None] | None:
+    """«-» → без фильтра, «120-140» → диапазон, «140» → ровно 140; None — не разобрали.
+
+    Раньше одно число молча игнорировалось и показывались все биты.
+    """
+    if val is None:
+        return None
+    val = val.replace(" ", "")
+    if val == "-":
+        return None, None
+    if val.isdigit():
+        return int(val), int(val)
+    lo, sep, hi = val.partition("-")
+    if not sep or not (lo or hi) or (lo and not lo.isdigit()) or (hi and not hi.isdigit()):
+        return None
+    lo_n, hi_n = (int(lo) if lo else None), (int(hi) if hi else None)
+    if lo_n is not None and hi_n is not None and lo_n > hi_n:
+        lo_n, hi_n = hi_n, lo_n
+    return lo_n, hi_n
 
 
 @router.message(BeatFilter.bpm)
 async def filter_bpm(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    bpm_min = bpm_max = None
-    val = guard_text(message)
-    if val is None:
-        await message.answer(t("need_text", user.lang))
+    rng = _parse_bpm_range(guard_text(message))
+    if rng is None:
+        await message.answer(t("filter_bpm", user.lang), reply_markup=skip_kb(user.lang, "fltskip"))
         return
-    if val != "-" and not any(ch.isdigit() for ch in val):
-        await message.answer(t("filter_bpm", user.lang))
-        return
-    if val != "-" and "-" in val:
-        lo, _, hi = val.partition("-")
-        if lo.strip().isdigit():
-            bpm_min = int(lo.strip())
-        if hi.strip().isdigit():
-            bpm_max = int(hi.strip())
+    await _run_filter(message, state, session, user, *rng)
+
+
+@router.callback_query(StateFilter(BeatFilter.key, BeatFilter.bpm), F.data == "fltskip")
+async def filter_skip(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    """Кнопка «Пропустить» вместо набора «-»."""
+    if await state.get_state() == BeatFilter.key.state:
+        await state.update_data(f_key=None)
+        await _ask_bpm(call.message, state, user)
+    else:
+        await _run_filter(call.message, state, session, user, None, None)
+    await call.answer()
+
+
+async def _run_filter(target: Message, state: FSMContext, session: AsyncSession, user: User,
+                      bpm_min: int | None, bpm_max: int | None) -> None:
     data = await state.get_data()
     ids = await repo.filter_beats(
         session, data["category_id"],
@@ -594,26 +600,29 @@ async def filter_bpm(message: Message, state: FSMContext, session: AsyncSession,
     )
     if not ids:
         await state.set_state(None)
-        await message.answer(t("filter_no_results", user.lang))
+        await target.answer(t("filter_no_results", user.lang))
         return
-    await _start_carousel(message, state, session, user, ids)
+    await _start_carousel(target, state, session, user, ids)
 
 
 async def _render_caption(session: AsyncSession, work_id: int, pos: int, total: int, lang: Lang, ctype: str):
+    """(работа, подпись) или None, если работу успели удалить."""
     pair = await repo.get_work_with_author(session, work_id)
+    if pair is None:
+        return None
     work, author = pair
     if ctype == "video":
         caption = t(
             "video_card", lang,
             title=esc(work.title), author=_contact(author),
-            vtype=esc(work.genre), buy=_money(work.price_buy),
+            vtype=esc(work.genre), buy=fmt_money(work.price_buy),
             pos=pos, total=total,
         )
     elif ctype == "visual":
         caption = t(
             "visual_card", lang,
             title=esc(work.title), author=_contact(author),
-            vtype=esc(work.genre), buy=_money(work.price_buy),
+            vtype=esc(work.genre), buy=fmt_money(work.price_buy),
             pos=pos, total=total,
         )
     else:
@@ -621,10 +630,14 @@ async def _render_caption(session: AsyncSession, work_id: int, pos: int, total: 
             "beat_card", lang,
             title=esc(work.title), author=_contact(author),
             genre=esc(work.genre), key=esc(work.key), bpm=work.bpm or "—",
-            rent=_money(work.price_rent), buy=_money(work.price_buy),
+            rent=fmt_money(work.price_rent), buy=fmt_money(work.price_buy),
             pos=pos, total=total,
         )
     return work, caption
+
+
+def _card_kb(lang: Lang, work: Work, ctype: str):
+    return work_card_keyboard(lang, work.id, ctype, has_rent=work.price_rent is not None)
 
 
 async def _start_carousel(event, state: FSMContext, session: AsyncSession, user: User, ids: list[int]):
@@ -632,9 +645,12 @@ async def _start_carousel(event, state: FSMContext, session: AsyncSession, user:
     data = await state.get_data()
     ctype = data.get("ctype", "beat")
     await state.update_data(beat_ids=ids, beat_idx=0)
-    work, caption = await _render_caption(session, ids[0], 1, len(ids), user.lang, ctype)
+    rendered = await _render_caption(session, ids[0], 1, len(ids), user.lang, ctype)
+    if rendered is None:
+        return
+    work, caption = rendered
     target = event.message if isinstance(event, CallbackQuery) else event
-    kb = work_card_keyboard(user.lang, work.id, ctype)
+    kb = _card_kb(user.lang, work, ctype)
     if ctype == "video":
         await target.answer_video(work.cover_file_id, caption=caption, reply_markup=kb)
     else:
@@ -646,17 +662,21 @@ async def carousel_nav(call: CallbackQuery, state: FSMContext, session: AsyncSes
     data = await state.get_data()
     ids = data.get("beat_ids") or []
     if not ids:
-        await call.answer()
+        await call.answer(t("button_outdated", user.lang))
         return
     ctype = data.get("ctype", "beat")
     idx = data.get("beat_idx", 0)
     idx = (idx + (1 if call.data.endswith("next") else -1)) % len(ids)
     await state.update_data(beat_idx=idx)
-    work, caption = await _render_caption(session, ids[idx], idx + 1, len(ids), user.lang, ctype)
+    rendered = await _render_caption(session, ids[idx], idx + 1, len(ids), user.lang, ctype)
+    if rendered is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    work, caption = rendered
     media_cls = InputMediaVideo if ctype == "video" else InputMediaPhoto
     await call.message.edit_media(
         media_cls(media=work.cover_file_id, caption=caption),
-        reply_markup=work_card_keyboard(user.lang, work.id, ctype),
+        reply_markup=_card_kb(user.lang, work, ctype),
     )
     await call.answer()
 
@@ -672,30 +692,44 @@ async def beat_listen(call: CallbackQuery, session: AsyncSession, user: User):
     work_id = int(call.data.split(":")[2])
     pair = await repo.get_work_with_author(session, work_id)
     if pair and pair[0].audio_file_id and _can_listen(pair[0], pair[1], call.from_user.id):
-        await call.message.answer_audio(pair[0].audio_file_id, title=pair[0].title)
+        await send_work_audio(call.message, pair[0])
     await call.answer()
 
 
 @router.callback_query(F.data.startswith("beat:buy:"))
-async def beat_buy(call: CallbackQuery, session: AsyncSession, user: User, bot: Bot):
-    work_id = int(call.data.split(":")[2])
+async def beat_buy(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
+    parts = call.data.split(":")
+    work_id = int(parts[2])
+    kind = parts[3] if len(parts) > 3 else "buy"   # у старых кнопок вида нет
     pair = await repo.get_work_with_author(session, work_id)
-    if pair is None:
-        await call.answer()
+    if pair is None or pair[0].moderation_status != ModerationStatus.approved:
+        await call.answer(t("button_outdated", user.lang))
         return
     work, author = pair
+
+    # Повторное нажатие не отправляет админу ещё одну такую же заявку.
+    data = await state.get_data()
+    sent = set(data.get("buy_sent") or [])
+    tag = f"{work_id}:{kind}"
+    if tag in sent:
+        await call.answer(t("beat_buy_already", user.lang), show_alert=True)
+        return
+
     # у битов есть аренда, у визуала/видео — только цена выкупа
-    if work.price_rent is not None:
-        prices = f"Аренда: {_money(work.price_rent)} ₽ | Выкуп: {_money(work.price_buy)} ₽"
+    if work.price_rent is None:
+        prices = f"Цена: {fmt_money(work.price_buy)} ₽"
+    elif kind == "rent":
+        prices = f"Хочет: <b>аренду</b> за {fmt_money(work.price_rent)} ₽"
     else:
-        prices = f"Цена: {_money(work.price_buy)} ₽"
+        prices = f"Хочет: <b>выкуп</b> за {fmt_money(work.price_buy)} ₽"
     text = t(
         "mod_beat_buy", Lang.ru,
         title=esc(work.title), work_id=work.id,
-        contact=_contact(user), author=_contact(author),
+        contact=contact(user), author=contact(author),
         prices=prices,
     )
     await notify_admin(bot, text)
+    await state.update_data(buy_sent=sorted(sent | {tag}))
     await call.answer(t("beat_buy_sent", user.lang), show_alert=True)
 
 
@@ -719,7 +753,8 @@ async def beat_ask_send(message: Message, state: FSMContext, user: User, bot: Bo
     text = t(
         "mod_beat_question", Lang.ru,
         title=esc(data.get("ask_title")), work_id=data.get("ask_work_id"),
-        contact=_contact(user), text=esc(question),
+        # ссылка, а не «id123»: у клиента может не быть @username
+        contact=contact(user), text=esc(question),
     )
     await notify_admin(bot, text)
     await state.set_state(None)

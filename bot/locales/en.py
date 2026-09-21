@@ -62,12 +62,12 @@ TEXTS = {
     "need_text": "⚠️ Text required. Please reply with text.",
     "text_too_long": "⚠️ Too long: {length} characters, the limit is {limit}. Please shorten it.",
     "need_photo": "⚠️ A photo is required. Send it as an image.",
-    "need_media": "⚠️ Send media: photo, video, audio or file.",
+    "need_media": "⚠️ Send a photo, video, audio file or document. Voice messages and video notes don't fit here.",
     # Portfolio
     "portfolio_only_creator": "⛔ Portfolio is available to approved creators.",
     "portfolio_empty": "🖼 Portfolio is empty. Add the first item.",
     "portfolio_add_prompt": "Send one portfolio media item: photo, video, audio or file.",
-    "portfolio_caption_prompt": "Add a caption for the item (or '-' to skip):",
+    "portfolio_caption_prompt": "Add a caption for the item — or press 'Skip':",
     "portfolio_saved": "✅ Item added to portfolio.",
     "portfolio_deleted": "🗑 Item deleted.",
     "portfolio_card": "🖼 Portfolio {pos}/{total}{caption}",
@@ -92,14 +92,14 @@ TEXTS = {
     "addbeat_genre": "Genre:",
     "addbeat_key": "Key (e.g. Am, C#):",
     "addbeat_bpm": "BPM (number):",
-    "addbeat_bpm_invalid": "Enter BPM as a number (e.g. 140).",
-    "addbeat_cover": "Send the cover (photo):",
-    "addbeat_cover_invalid": "A photo is required. Send the cover as an image.",
-    "addbeat_audio": "Send the audio snippet (audio/file):",
-    "addbeat_audio_invalid": "An audio file is required.",
+    "addbeat_bpm_invalid": "Enter BPM as a whole number from 1 to 999 (e.g. 140).",
+    "addbeat_cover": "Send the cover (as a photo):",
+    "addbeat_cover_invalid": "⚠️ A cover photo is required. If you're sending the image as a file, send it as a photo (compressed) instead.",
+    "addbeat_audio": "Send the audio snippet — MP3 or WAV (a file is fine):",
+    "addbeat_audio_invalid": "⚠️ An audio file is required (MP3, WAV…). Voice messages and other file types won't work.",
     "addbeat_price_rent": "💸 Rent price (RUB):",
     "addbeat_price_buy": "💰 Buyout price (RUB):",
-    "addbeat_price_invalid": "Enter the price as a number.",
+    "addbeat_price_invalid": "Enter the price as a number, e.g. 5000 or 5 000.",
     "addbeat_sent": "✅ Beat sent for moderation.",
     "mod_new_beat": (
         "🆕 <b>New beat for moderation</b>\n\n"
@@ -116,8 +116,8 @@ TEXTS = {
     "filter_setup": "🎚 Set up filter",
     "filter_genre": "Choose a genre:",
     "filter_any": "Any",
-    "filter_key": "Key (as text) or '-' to skip:",
-    "filter_bpm": "BPM range as '120-140' or '-' to skip:",
+    "filter_key": "Key (e.g. Am) — or press 'Skip':",
+    "filter_bpm": "BPM: a number (140) or a range (120-140) — or press 'Skip':",
     "filter_no_results": "😔 Nothing matched your filter.",
     "beat_card": (
         "🎵 <b>{title}</b>\n"
@@ -144,13 +144,10 @@ TEXTS = {
         "{prices}"
     ),
     "order_form_start": (
-        "📝 Order brief '{title}'. Answer one message at a time.\n"
-        "📎 You'll be able to attach images and files (references, examples) at the end — "
-        "for now, please reply with text."
+        "📝 Brief for «{title}». Answer one message at a time.\n📎 You'll be able to attach files and voice messages (references, examples, notes) at the end — reply with text for now."
     ),
     "order_need_text": (
-        "⚠️ This step needs text. You'll be able to attach images and files at the end, "
-        "after all the questions."
+        "⚠️ This step needs text. You'll be able to attach files and voice messages at the end, after all the questions."
     ),
     "order_text_too_long": (
         "⚠️ Too long: {length} characters, the limit is {limit}. Please shorten your answer — "
@@ -158,11 +155,10 @@ TEXTS = {
     ),
     "order_published": "✅ Your order #{order_id} is published. Waiting for a creator to take it.",
     "order_attach_prompt": (
-        "📎 Attach images or files to the brief (references, examples) — one per message. "
-        "Press 'Done' when finished. This is optional."
+        "📎 Attach files to the brief — references, examples, a voice note with details (up to 10). Press 'Done' when finished. This is optional."
     ),
     "order_attach_added": "✅ Attachment added (total: {count}). Send more or press 'Done'.",
-    "order_attach_need_media": "⚠️ Send an image or file, or press 'Done'.",
+    "order_attach_need_media": "⚠️ Send a photo, video, audio, voice message or file — or press 'Done'.",
     "order_attach_done": "✅ Done",
     "order_card_attachments": "📎 Attachments from client: {count}",
     "order_category_unavailable": "⚠️ Category temporarily unavailable (topic not configured). Try later.",
@@ -207,8 +203,8 @@ TEXTS = {
     "order_card_header": "📦 <b>Order #{order_id}</b> · {title}\nStatus: {status}",
     "order_card_contact_creator": "👤 Creator: {contact}",
     "order_card_contact_client": "👤 Client: {contact}",
-    "order_first_pay": "💳 Pay <b>50% prepayment</b> to:\n{details}",
-    "order_second_pay": "💳 Pay <b>the remaining 50%</b> to:\n{details}",
+    "order_first_pay": "💳 Pay <b>50% prepayment</b> to:\n{details}\nPut 'order #{order_id}' in the payment comment. After paying, press 'I paid'.",
+    "order_second_pay": "💳 Pay <b>the remaining 50%</b> to:\n{details}\nPut 'order #{order_id}' in the payment comment. After paying, press 'I paid'.",
     "ostatus_published": "🟣 published",
     "ostatus_taken": "🟡 taken, awaiting your confirmation",
     "ostatus_await_prepay": "💳 awaiting 50% prepayment",
@@ -268,7 +264,7 @@ TEXTS = {
     "btn_price_buy": "💰 Buyout price",
     "btn_delete_work": "🗑 Delete",
     "work_ask_price": "Enter the new price (number):",
-    "work_price_invalid": "Enter the price as a number.",
+    "work_price_invalid": "Enter the price as a number, e.g. 5000 or 5 000.",
     "work_price_updated": "✅ Price updated.",
     "work_deleted": "🗑 Work deleted.",
     "status_pending": "⏳ under moderation",
@@ -276,7 +272,7 @@ TEXTS = {
     "status_rejected": "❌ rejected",
     "review_only_creator": "⛔ Only approved creators can upload reviews.",
     "review_ask_photo": "Send a screenshot of the review/chat with a happy client (photo):",
-    "review_not_photo": "A photo is required. Send the screenshot as an image.",
+    "review_not_photo": "⚠️ The screenshot is needed as a photo. If you're sending it as a file, send it as a photo (compressed) instead.",
     "review_saved": "✅ Thank you! The review is published in the SCREW PROD channel.",
     "review_saved_no_channel": "✅ Review saved (mirror channel not configured).",
     "reviews_intro": "💬 <b>SCREW PROD reviews</b>\nMirror channel: {url}",
@@ -295,7 +291,7 @@ TEXTS = {
     "addvisual_title": "🖼 Work title:",
     "addvisual_type": "Type (cover / banner / art / logo / 3D):",
     "addvisual_cover": "Send the work image (photo):",
-    "addvisual_cover_invalid": "A photo is required. Send an image.",
+    "addvisual_cover_invalid": "⚠️ The image is needed as a photo. If you're sending it as a file, send it as a photo (compressed) instead.",
     "addvisual_price_buy": "💰 Price (RUB):",
     "addvisual_sent": "✅ Visual sent for moderation.",
     "mod_new_visual": (
@@ -317,8 +313,8 @@ TEXTS = {
     "filter_type": "Choose a type:",
     "addvideo_title": "🎬 Work title:",
     "addvideo_type": "Video type (clip / lyric video / ad / motion):",
-    "addvideo_file": "Send the video file:",
-    "addvideo_file_invalid": "A video is required. Send a video file.",
+    "addvideo_file": "Send the video (as a video, not as a file):",
+    "addvideo_file_invalid": "⚠️ A video is required. If you're sending it as a file, send it as a video (compressed) instead.",
     "addvideo_price_buy": "💰 Price (RUB):",
     "addvideo_sent": "✅ Video sent for moderation.",
     "mod_new_video": (
@@ -341,4 +337,19 @@ TEXTS = {
         "💰 Price: {buy} ₽\n"
         "Status: {status}"
     ),
+    # --- добавлено при аудите: навигация, форматы, заказы, админка ---
+    "form_skip": "⏭ Skip",
+    "need_start": "👋 Press /start to begin.",
+    "unknown_input": "🤖 I work with the menu buttons — pick a section below. To cancel the current action: /cancel.",
+    "button_outdated": "⌛ This button is outdated — please reopen the section.",
+    "creator_blocked_info": "🚫 Your application was declined or your creator profile is blocked. If you think this is a mistake, please contact the administration.",
+    "portfolio_caption_need_text": "⚠️ A caption for the file you sent is needed now — as text, or press 'Skip'. Add the next file afterwards via '➕ Add'.",
+    "btn_delete_work_yes": "🗑 Yes, delete",
+    "work_delete_confirm": "Delete this work? Confirm with the button on the card.",
+    "order_attach_limit": "⚠️ You can attach up to {limit} files. Press 'Done'.",
+    "ostatus_taken_creator": "🟡 taken, waiting for the client's confirmation",
+    "btn_attachments": "📎 Attachments ({count})",
+    "beat_rent_btn": "💸 Lease",
+    "beat_buyout_btn": "💰 Buyout",
+    "beat_buy_already": "✅ Request already sent — the admin will contact you.",
 }

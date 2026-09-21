@@ -36,6 +36,27 @@ def brief_text(code: str, brief: dict | None) -> str:
     )
 
 
+def attachments_of(order: Order) -> list[dict]:
+    return (order.brief or {}).get("_attachments") or []
+
+
+def tender_text(order: Order, category: Category, client: User) -> str:
+    """Пост-тендер в топике категории (группа всегда на русском)."""
+    return t(
+        "tender_card", Lang.ru,
+        title=category.title_ru, order_id=order.id,
+        contact=contact(client), body=brief_text(category.code, order.brief),
+    )
+
+
+def status_label(status: OrderStatus, viewer: str, lang: Lang) -> str:
+    """Подпись статуса с точки зрения смотрящего: «ждём вашего подтверждения»
+    верно только для клиента, исполнителю и админу — «ждём подтверждения клиента»."""
+    if status == OrderStatus.taken and viewer != "client":
+        return t("ostatus_taken_creator", lang)
+    return t(f"ostatus_{status.value}", lang)
+
+
 def render_order_card(
     order: Order,
     client: User,
@@ -45,18 +66,17 @@ def render_order_card(
     lang: Lang,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     title = category.title_en if lang == Lang.en else category.title_ru
-    status_label = t(f"ostatus_{order.status.value}", lang)
+    label = status_label(order.status, viewer, lang)
 
-    lines = [t("order_card_header", lang, order_id=order.id, title=title, status=status_label)]
+    lines = [t("order_card_header", lang, order_id=order.id, title=title, status=label)]
 
     # ТЗ (для исполнителя и админа полезно; клиенту тоже не мешает)
     body = brief_text(category.code, order.brief)
     if body:
         lines.append("\n" + body)
-    if order.brief:
-        attachments = order.brief.get("_attachments") or []
-        if attachments:
-            lines.append("\n" + t("order_card_attachments", lang, count=len(attachments)))
+    attachments = attachments_of(order)
+    if attachments:
+        lines.append("\n" + t("order_card_attachments", lang, count=len(attachments)))
 
     # контакты (после предоплаты)
     if order.status in _CONTACTS_OPEN and creator_user:
@@ -68,9 +88,9 @@ def render_order_card(
     # платёжные инструкции
     if viewer == "client":
         if order.status == OrderStatus.await_prepay:
-            lines.append("\n" + t("order_first_pay", lang, details=app_config.PAYMENT_DETAILS))
+            lines.append("\n" + t("order_first_pay", lang, details=app_config.PAYMENT_DETAILS, order_id=order.id))
         elif order.status == OrderStatus.await_final:
-            lines.append("\n" + t("order_second_pay", lang, details=app_config.PAYMENT_DETAILS))
+            lines.append("\n" + t("order_second_pay", lang, details=app_config.PAYMENT_DETAILS, order_id=order.id))
 
     text = "\n".join(lines)
     return text, _keyboard(order, viewer, lang)
@@ -86,10 +106,13 @@ def _keyboard(order: Order, viewer: str, lang: Lang) -> InlineKeyboardMarkup | N
     rows: list[list[InlineKeyboardButton]] = []
 
     if viewer == "client":
-        if st == OrderStatus.taken:
+        if st == OrderStatus.published:
+            rows.append(_btn("btn_cancel_order", f"ord:cancel:{oid}", lang))
+        elif st == OrderStatus.taken:
             rows.append(_btn("btn_confirm_creator", f"ord:confirmcreator:{oid}", lang))
             rows.append(_btn("btn_cancel_order", f"ord:cancel:{oid}", lang))
         elif st == OrderStatus.await_prepay:
+            rows.append(_btn("btn_paid", f"ord:paid:{oid}", lang))
             rows.append(_btn("btn_cancel_order", f"ord:cancel:{oid}", lang))
         elif st == OrderStatus.in_progress:
             rows.append(_btn("btn_cancel_order", f"ord:cancel:{oid}", lang))
@@ -111,5 +134,12 @@ def _keyboard(order: Order, viewer: str, lang: Lang) -> InlineKeyboardMarkup | N
             rows.append(_btn("btn_confirm_final", f"ord:final:{oid}", lang))
         elif st == OrderStatus.cancelled:
             rows.append(_btn("btn_republish", f"ord:republish:{oid}", lang))
+
+    # Вложения клиента — прислать в личку (в карточке видно только их число).
+    attachments = attachments_of(order)
+    if attachments and st != OrderStatus.cancelled:
+        rows.append([InlineKeyboardButton(
+            text=t("btn_attachments", lang, count=len(attachments)), callback_data=f"ord:att:{oid}",
+        )])
 
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None

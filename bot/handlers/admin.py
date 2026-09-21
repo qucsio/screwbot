@@ -1,5 +1,3 @@
-from decimal import Decimal, InvalidOperation
-
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -7,19 +5,25 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InputMediaPhoto,
+    InputMediaVideo,
     Message,
 )
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Creator, CreatorStatus, Lang, Order, User
+from bot.db.models import Creator, CreatorStatus, Lang, ModerationStatus, Order, User, Work
 from bot.db.repositories import works as repo
 from bot.filters import IsAdmin
+from bot.handlers.beats import parse_bpm
 from bot.locales import t
-from bot.services.forms import read_text
+from bot.services.forms import cancel_kb, read_text
+from bot.services.media import detect_audio
+from bot.services.moderation import creator_card, send_work_card
+from bot.services.money import fmt_money as _money
 from bot.services.money import parse_money
 from bot.services.order_view import contact as _contact
-from bot.services.text import EXPERIENCE_MAX, SERVICE_MAX, SOCIALS_MAX, esc
+from bot.services.text import EXPERIENCE_MAX, GENRE_MAX, KEY_MAX, SERVICE_MAX, SOCIALS_MAX, TITLE_MAX, esc
 from bot.services.ui import replace_card
 from bot.states.admin import AdminStates
 
@@ -29,9 +33,8 @@ router.callback_query.filter(IsAdmin())
 
 L = Lang.ru  # админ-панель всегда на русском
 
-
-def _money(v) -> str:
-    return f"{v:g}" if v is not None else "—"
+# Исполнителей на странице: длинный список целиком упирается в лимиты Telegram.
+CREATORS_PAGE = 20
 
 
 # =========================================================================
@@ -42,6 +45,7 @@ def _money(v) -> str:
 def _root_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=t("adm_btn_queue", L), callback_data="adm:queue")],
             [InlineKeyboardButton(text=t("adm_btn_creators", L), callback_data="adm:creators")],
             [InlineKeyboardButton(text=t("adm_btn_works", L), callback_data="adm:works")],
             [InlineKeyboardButton(text=t("adm_btn_add_creator", L), callback_data="adm:addcreator")],
@@ -63,6 +67,56 @@ async def adm_root(call: CallbackQuery, state: FSMContext):
 
 
 # =========================================================================
+# ОЧЕРЕДЬ МОДЕРАЦИИ
+# =========================================================================
+
+
+@router.callback_query(F.data == "adm:queue")
+async def adm_queue(call: CallbackQuery, session: AsyncSession):
+    """Всё, что ждёт решения: раньше пропущенную карточку в личке было не найти."""
+    creators = await repo.list_pending_creators(session)
+    works = await repo.list_pending_works(session)
+    rows = [
+        [InlineKeyboardButton(
+            text=f"👤 {u.nickname or u.username or c.id} · {c.service or '—'}"[:60],
+            callback_data=f"adm:qc:{c.id}",
+        )]
+        for c, u in creators
+    ] + [
+        [InlineKeyboardButton(text=f"🎵 {w.title} · #{w.id}"[:60], callback_data=f"adm:qw:{w.id}")]
+        for w in works
+    ]
+    rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:root")])
+    text = t("adm_queue_title", L, creators=len(creators), works=len(works)) if (creators or works) \
+        else t("adm_queue_empty", L)
+    await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:qc:"))
+async def adm_queue_creator(call: CallbackQuery, session: AsyncSession):
+    pair = await repo.get_creator_full(session, int(call.data.split(":")[2]))
+    if pair is None or pair[0].status != CreatorStatus.pending:
+        await call.answer(t("adm_queue_done", L), show_alert=True)
+        return
+    creator, user = pair
+    text, kb = creator_card(user, creator)
+    await call.message.answer(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:qw:"))
+async def adm_queue_work(call: CallbackQuery, session: AsyncSession, bot: Bot):
+    pair = await repo.get_work_with_author(session, int(call.data.split(":")[2]))
+    if pair is None or pair[0].moderation_status != ModerationStatus.pending:
+        await call.answer(t("adm_queue_done", L), show_alert=True)
+        return
+    work, author = pair
+    await send_work_card(bot, work, author, await repo.work_catalog_type(session, work))
+    await call.answer()
+
+
+# =========================================================================
 # ИСПОЛНИТЕЛИ
 # =========================================================================
 
@@ -71,11 +125,14 @@ def _cstatus(status: CreatorStatus) -> str:
     return t(f"cstatus_{status.value}", L)
 
 
-async def _show_creators(call: CallbackQuery, session: AsyncSession):
-    creators = await repo.list_creators(session)
-    if not creators:
+async def _show_creators(call: CallbackQuery, session: AsyncSession, page: int = 0):
+    total = await repo.count_creators(session)
+    if not total:
         await call.message.edit_text(t("adm_creators_empty", L), reply_markup=_root_keyboard())
         return
+    pages = (total + CREATORS_PAGE - 1) // CREATORS_PAGE
+    page = max(0, min(page, pages - 1))
+    creators = await repo.list_creators(session, offset=page * CREATORS_PAGE, limit=CREATORS_PAGE)
     rows = [
         [InlineKeyboardButton(
             text=f"{_cstatus(c.status)[:2]} {u.nickname or u.username or c.id} · {_money(c.balance)}₽",
@@ -83,6 +140,14 @@ async def _show_creators(call: CallbackQuery, session: AsyncSession):
         )]
         for c, u in creators
     ]
+    if pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"adm:creators:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data=f"adm:creators:{page}"))
+        if page < pages - 1:
+            nav.append(InlineKeyboardButton(text="➡️", callback_data=f"adm:creators:{page + 1}"))
+        rows.append(nav)
     rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:root")])
     await call.message.edit_text(t("adm_creators_title", L), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
@@ -90,6 +155,15 @@ async def _show_creators(call: CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data == "adm:creators")
 async def adm_creators(call: CallbackQuery, session: AsyncSession):
     await _show_creators(call, session)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:creators:"))
+async def adm_creators_page(call: CallbackQuery, session: AsyncSession):
+    try:
+        await _show_creators(call, session, int(call.data.split(":")[2]))
+    except Exception:
+        pass  # «message is not modified» при нажатии на номер текущей страницы
     await call.answer()
 
 
@@ -177,6 +251,26 @@ async def adm_unblock(call: CallbackQuery, session: AsyncSession):
 
 
 @router.callback_query(F.data.startswith("adm:cdelete:"))
+async def adm_delete_creator_ask(call: CallbackQuery, session: AsyncSession):
+    """Удаление необратимо (работы и портфолио уходят каскадом) — сначала подтверждение."""
+    cid = int(call.data.split(":")[2])
+    pair = await repo.get_creator_full(session, cid)
+    if pair is None:
+        await call.answer()
+        return
+    creator, user = pair
+    works = await session.scalar(select(func.count(Work.id)).where(Work.creator_id == cid))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t("adm_btn_confirm_delete", L), callback_data=f"adm:cdelok:{cid}")],
+        [InlineKeyboardButton(text=t("back", L), callback_data=f"adm:creator:{cid}")],
+    ])
+    await call.message.edit_text(
+        t("adm_confirm_del_creator", L, contact=_contact(user), works=works or 0), reply_markup=kb,
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:cdelok:"))
 async def adm_delete_creator(call: CallbackQuery, session: AsyncSession):
     cid = int(call.data.split(":")[2])
     pair = await repo.get_creator_full(session, cid)
@@ -196,7 +290,7 @@ async def adm_balance_ask(call: CallbackQuery, state: FSMContext):
     _, _, op, cid_raw = call.data.split(":")   # op: add | sub
     await state.set_state(AdminStates.writeoff)
     await state.update_data(creator_id=int(cid_raw), op=op)
-    await call.message.answer(t("adm_ask_credit" if op == "add" else "adm_ask_writeoff", L))
+    await call.message.answer(t("adm_ask_credit" if op == "add" else "adm_ask_writeoff", L), reply_markup=cancel_kb(L))
     await call.answer()
 
 
@@ -205,7 +299,7 @@ async def adm_balance_save(message: Message, state: FSMContext, session: AsyncSe
     # направление задаёт кнопка (начислить/списать), поэтому сумма всегда положительная
     amount = parse_money(message.text)
     if amount is None:
-        await message.answer(t("adm_writeoff_invalid", L))
+        await message.answer(t("adm_writeoff_invalid", L), reply_markup=cancel_kb(L))
         return
     data = await state.get_data()
     op = data.get("op", "sub")
@@ -213,10 +307,10 @@ async def adm_balance_save(message: Message, state: FSMContext, session: AsyncSe
     pair = await repo.get_creator_full(session, data["creator_id"])
     if pair:
         creator = pair[0]
-        creator.balance = (creator.balance or Decimal(0)) + (amount if op == "add" else -amount)
+        creator.balance = (creator.balance or 0) + (amount if op == "add" else -amount)
         await session.commit()
         done_key = "adm_credit_done" if op == "add" else "adm_writeoff_done"
-        await message.answer(t(done_key, L, amount=amount, balance=_money(creator.balance)))
+        await message.answer(t(done_key, L, amount=_money(amount), balance=_money(creator.balance)))
 
 
 # --- Ручное добавление исполнителя --------------------------------------
@@ -225,7 +319,7 @@ async def adm_balance_save(message: Message, state: FSMContext, session: AsyncSe
 @router.callback_query(F.data == "adm:addcreator")
 async def adm_add_creator_ask(call: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.add_creator)
-    await call.message.answer(t("adm_ask_add_creator", L))
+    await call.message.answer(t("adm_ask_add_creator", L), reply_markup=cancel_kb(L))
     await call.answer()
 
 
@@ -275,7 +369,7 @@ async def adm_creator_edit_ask(call: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.creator_field)
     await state.update_data(creator_id=int(cid_raw), field=_EF_FIELDS[field])
     prompt = {"service": "adm_ask_service", "socials": "adm_ask_socials", "desc": "adm_ask_desc"}[field]
-    await call.message.answer(t(prompt, L))
+    await call.message.answer(t(prompt, L), reply_markup=cancel_kb(L))
     await call.answer()
 
 
@@ -312,7 +406,7 @@ async def adm_creator_add_work(call: CallbackQuery):
 @router.callback_query(F.data.startswith("adm:cworkbeat:"))
 async def adm_creator_add_beat(call: CallbackQuery, state: FSMContext):
     from bot.handlers.beats import _BEAT_STEPS
-    from bot.services.forms import cancel_kb, step
+    from bot.services.forms import step
     from bot.states.beats import AddBeat
 
     cid = int(call.data.split(":")[2])
@@ -326,7 +420,7 @@ async def adm_creator_add_beat(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("adm:cworkvisual:"))
 async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
     from bot.handlers.beats import _VISUAL_STEPS
-    from bot.services.forms import cancel_kb, step
+    from bot.services.forms import step
     from bot.states.beats import AddVisual
 
     cid = int(call.data.split(":")[2])
@@ -340,7 +434,7 @@ async def adm_creator_add_visual(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("adm:cworkvideo:"))
 async def adm_creator_add_video(call: CallbackQuery, state: FSMContext):
     from bot.handlers.beats import _VIDEO_STEPS
-    from bot.services.forms import cancel_kb, step
+    from bot.services.forms import step
     from bot.states.beats import AddVideo
 
     cid = int(call.data.split(":")[2])
@@ -376,16 +470,21 @@ async def adm_works(call: CallbackQuery, session: AsyncSession):
 
 
 def _work_keyboard(work_id: int, has_audio: bool = False, ctype: str = "beat") -> InlineKeyboardMarkup:
+    rows = [[
+        InlineKeyboardButton(text=t("adm_btn_edit_title", L), callback_data=f"adm:wf:title:{work_id}"),
+        InlineKeyboardButton(
+            text=t("adm_btn_edit_video" if ctype == "video" else "adm_btn_edit_cover", L),
+            callback_data=f"adm:wcover:{work_id}",
+        ),
+    ]]
     if ctype in ("visual", "video"):
         # у визуала/видео нет аренды/тональности/BPM/аудио — только тип и цена выкупа
-        rows = [
-            [
-                InlineKeyboardButton(text=t("adm_btn_edit_type", L), callback_data=f"adm:wf:genre:{work_id}"),
-                InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
-            ],
-        ]
+        rows.append([
+            InlineKeyboardButton(text=t("adm_btn_edit_type", L), callback_data=f"adm:wf:genre:{work_id}"),
+            InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
+        ])
     else:
-        rows = [
+        rows += [
             [
                 InlineKeyboardButton(text=t("adm_btn_edit_rent", L), callback_data=f"adm:wf:price_rent:{work_id}"),
                 InlineKeyboardButton(text=t("adm_btn_edit_buy", L), callback_data=f"adm:wf:price_buy:{work_id}"),
@@ -436,19 +535,26 @@ async def _show_work_card(call: CallbackQuery, session: AsyncSession, work_id: i
         await replace_card(call, text, kb, photo=cover)
 
 
-async def _refresh_work_card(bot: Bot, session: AsyncSession, data: dict):
-    """Обновляет подпись карточки-фото на месте после правки поля."""
+async def _refresh_work_card(bot: Bot, session: AsyncSession, data: dict, media_changed: bool = False):
+    """Обновляет карточку работы на месте после правки (подпись или само медиа)."""
     if not data.get("card_msg"):
         return
     pair = await repo.get_work_with_author(session, data["work_id"])
     if pair is None:
         return
     ctype = await repo.work_catalog_type(session, pair[0])
-    _, text, kb = _work_card_content(*pair, ctype)
+    cover, text, kb = _work_card_content(*pair, ctype)
     try:
-        await bot.edit_message_caption(
-            chat_id=data["card_chat"], message_id=data["card_msg"], caption=text, reply_markup=kb
-        )
+        if media_changed and cover:
+            media_cls = InputMediaVideo if ctype == "video" else InputMediaPhoto
+            await bot.edit_message_media(
+                media=media_cls(media=cover, caption=text),
+                chat_id=data["card_chat"], message_id=data["card_msg"], reply_markup=kb,
+            )
+        else:
+            await bot.edit_message_caption(
+                chat_id=data["card_chat"], message_id=data["card_msg"], caption=text, reply_markup=kb
+            )
     except Exception:
         pass
 
@@ -460,6 +566,21 @@ async def adm_work_card(call: CallbackQuery, session: AsyncSession):
 
 
 @router.callback_query(F.data.startswith("adm:wdel:"))
+async def adm_work_delete_ask(call: CallbackQuery):
+    """Подтверждение удаления прямо на карточке работы."""
+    work_id = int(call.data.split(":")[2])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t("adm_btn_confirm_delete", L), callback_data=f"adm:wdelok:{work_id}")],
+        [InlineKeyboardButton(text=t("back", L), callback_data=f"adm:work:{work_id}")],
+    ])
+    try:
+        await call.message.edit_reply_markup(reply_markup=kb)
+    except Exception:
+        pass
+    await call.answer(t("adm_confirm_del_work", L))
+
+
+@router.callback_query(F.data.startswith("adm:wdelok:"))
 async def adm_work_delete(call: CallbackQuery, session: AsyncSession):
     work = await repo.get_work(session, int(call.data.split(":")[2]))
     if work:
@@ -470,8 +591,8 @@ async def adm_work_delete(call: CallbackQuery, session: AsyncSession):
 
 
 _NUMERIC_FIELDS = {"price_rent", "price_buy", "bpm"}
-# длины колонок works.genre / works.key — длиннее БД не примет
-_TEXT_FIELD_MAX = {"genre": 64, "key": 16}
+# длины колонок works.* — длиннее БД не примет
+_TEXT_FIELD_MAX = {"title": TITLE_MAX, "genre": GENRE_MAX, "key": KEY_MAX}
 
 
 @router.callback_query(F.data.startswith("adm:wf:"))
@@ -486,9 +607,11 @@ async def adm_work_field_ask(call: CallbackQuery, state: FSMContext):
         prompt = t("adm_ask_bpm", L)
     elif field in ("price_rent", "price_buy"):
         prompt = t("adm_ask_price", L)
+    elif field == "title":
+        prompt = t("adm_ask_title", L)
     else:
         prompt = t("adm_ask_value", L)
-    await call.message.answer(prompt)
+    await call.message.answer(prompt, reply_markup=cancel_kb(L))
     await call.answer()
 
 
@@ -496,26 +619,19 @@ async def adm_work_field_ask(call: CallbackQuery, state: FSMContext):
 async def adm_work_field_save(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
     data = await state.get_data()
     field = data["field"]
-    raw = (message.text or "").strip()
 
     value: object
-    if field in _NUMERIC_FIELDS:
-        cleaned = raw.replace(",", ".").replace(" ", "")
-        if field == "bpm":
-            if not cleaned.isdigit():
-                await message.answer(t("adm_value_invalid", L))
-                return
-            value = int(cleaned)
-        else:
-            try:
-                value = Decimal(cleaned)
-            except InvalidOperation:
-                await message.answer(t("adm_value_invalid", L))
-                return
+    if field == "bpm":
+        value = parse_bpm(message.text)
+    elif field in _NUMERIC_FIELDS:
+        value = parse_money(message.text, allow_zero=True)
     else:
-        value = await read_text(message, L, _TEXT_FIELD_MAX.get(field, 64))
+        value = await read_text(message, L, _TEXT_FIELD_MAX.get(field, GENRE_MAX))
         if value is None:
             return
+    if value is None:
+        await message.answer(t("adm_value_invalid", L), reply_markup=cancel_kb(L))
+        return
 
     await state.clear()
     work = await repo.get_work(session, data["work_id"])
@@ -534,18 +650,59 @@ async def adm_work_audio_ask(call: CallbackQuery, state: FSMContext):
         work_id=int(call.data.split(":")[2]),
         card_chat=call.message.chat.id, card_msg=call.message.message_id,
     )
-    await call.message.answer(t("adm_ask_audio", L))
+    await call.message.answer(t("adm_ask_audio", L), reply_markup=cancel_kb(L))
     await call.answer()
 
 
-@router.message(AdminStates.work_audio, F.audio | F.voice | F.document)
+@router.message(AdminStates.work_audio)
 async def adm_work_audio_save(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
-    file = message.audio or message.voice or message.document
+    found = detect_audio(message)
+    if found is None:
+        await message.answer(t("addbeat_audio_invalid", L), reply_markup=cancel_kb(L))
+        return
+    kind, file_id = found
     data = await state.get_data()
     await state.clear()
     work = await repo.get_work(session, data["work_id"])
     if work:
-        work.audio_file_id = file.file_id
+        work.audio_file_id, work.audio_kind = file_id, kind
         await session.commit()
     await _refresh_work_card(bot, session, data)
+    await message.answer(t("adm_work_updated", L))
+
+
+@router.callback_query(F.data.startswith("adm:wcover:"))
+async def adm_work_cover_ask(call: CallbackQuery, state: FSMContext, session: AsyncSession):
+    work = await repo.get_work(session, int(call.data.split(":")[2]))
+    if work is None:
+        await call.answer()
+        return
+    ctype = await repo.work_catalog_type(session, work)
+    await state.set_state(AdminStates.work_cover)
+    await state.update_data(
+        work_id=work.id, ctype=ctype,
+        card_chat=call.message.chat.id, card_msg=call.message.message_id,
+    )
+    await call.message.answer(t("adm_ask_video" if ctype == "video" else "adm_ask_cover", L), reply_markup=cancel_kb(L))
+    await call.answer()
+
+
+@router.message(AdminStates.work_cover)
+async def adm_work_cover_save(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    data = await state.get_data()
+    if data.get("ctype") == "video":
+        file_id = message.video.file_id if message.video else None
+        invalid_key = "addvideo_file_invalid"
+    else:
+        file_id = message.photo[-1].file_id if message.photo else None
+        invalid_key = "addvisual_cover_invalid"
+    if file_id is None:
+        await message.answer(t(invalid_key, L), reply_markup=cancel_kb(L))
+        return
+    await state.clear()
+    work = await repo.get_work(session, data["work_id"])
+    if work:
+        work.cover_file_id = file_id
+        await session.commit()
+    await _refresh_work_card(bot, session, data, media_changed=True)
     await message.answer(t("adm_work_updated", L))

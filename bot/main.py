@@ -6,11 +6,13 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats
 from redis.asyncio import Redis
 
 from bot.config import get_settings
 from bot.handlers import setup_routers
 from bot.middlewares.db import DBMiddleware
+from bot.services.notify import safe_send
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +34,19 @@ def _validate_config() -> None:
         logging.warning("Категории без thread_id (заказы недоступны): %s", ", ".join(missing))
 
 
+async def _set_commands(bot: Bot) -> None:
+    """Меню команд (кнопка «/» в личке с ботом)."""
+    scope = BotCommandScopeAllPrivateChats()
+    await safe_send(bot.set_my_commands([
+        BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="cancel", description="Отменить текущее действие"),
+    ], scope=scope))
+    await safe_send(bot.set_my_commands([
+        BotCommand(command="start", description="Main menu"),
+        BotCommand(command="cancel", description="Cancel the current action"),
+    ], scope=scope, language_code="en"))
+
+
 async def main() -> None:
     settings = get_settings()
     _validate_config()
@@ -49,7 +64,10 @@ async def main() -> None:
 
     redis = Redis(host=settings.redis_host, port=settings.redis_port)
     storage = RedisStorage(redis)
-    dp = Dispatcher(storage=storage)
+    # Апдейты одного пользователя — строго по очереди. Без этого aiogram обрабатывает
+    # их параллельно: из альбома фото во вложениях сохранялось одно (гонка за данные
+    # формы), а двойное нажатие «Готово» создавало два заказа.
+    dp = Dispatcher(storage=storage, events_isolation=storage.create_isolation())
 
     db_mw = DBMiddleware()
     dp.message.middleware(db_mw)
@@ -58,7 +76,10 @@ async def main() -> None:
     dp.include_router(setup_routers())
 
     logging.info("Bot started")
-    await bot.delete_webhook(drop_pending_updates=True)
+    await _set_commands(bot)
+    # Не сбрасываем накопившиеся апдейты: сообщения, присланные, пока бот был
+    # недоступен (перезапуск, падение), обрабатываются после старта, а не теряются.
+    await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot)
 
 

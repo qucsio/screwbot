@@ -1,4 +1,4 @@
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import (
@@ -72,7 +72,8 @@ async def filter_beats(
     if genre:
         q = q.where(Work.genre == genre)
     if key:
-        q = q.where(Work.key == key)
+        # тональность — свободный текст исполнителя: «Am» и «am» — одно и то же
+        q = q.where(func.lower(func.trim(Work.key)) == key.strip().lower())
     if bpm_min is not None:
         q = q.where(Work.bpm >= bpm_min)
     if bpm_max is not None:
@@ -113,13 +114,46 @@ async def get_work_with_author(
 # --- Админские выборки ---------------------------------------------------
 
 
-async def list_creators(session: AsyncSession) -> list[tuple[Creator, User]]:
-    res = await session.execute(
+async def list_creators(
+    session: AsyncSession, offset: int = 0, limit: int | None = None
+) -> list[tuple[Creator, User]]:
+    q = (
         select(Creator, User)
         .join(User, User.id == Creator.user_id)
         .order_by(Creator.id.desc())
+        .offset(offset)
+    )
+    if limit is not None:
+        q = q.limit(limit)
+    res = await session.execute(q)
+    return [(r[0], r[1]) for r in res.all()]
+
+
+async def count_creators(session: AsyncSession) -> int:
+    return int(await session.scalar(select(func.count(Creator.id))))
+
+
+async def list_pending_creators(session: AsyncSession, limit: int = 30) -> list[tuple[Creator, User]]:
+    """Заявки исполнителей, ждущие решения (старые первыми)."""
+    res = await session.execute(
+        select(Creator, User)
+        .join(User, User.id == Creator.user_id)
+        .where(Creator.status == CreatorStatus.pending)
+        .order_by(Creator.id)
+        .limit(limit)
     )
     return [(r[0], r[1]) for r in res.all()]
+
+
+async def list_pending_works(session: AsyncSession, limit: int = 30) -> list[Work]:
+    """Работы на модерации (старые первыми)."""
+    res = await session.execute(
+        select(Work)
+        .where(Work.moderation_status == ModerationStatus.pending)
+        .order_by(Work.id)
+        .limit(limit)
+    )
+    return list(res.scalars().all())
 
 
 async def get_creator_full(session: AsyncSession, creator_id: int) -> tuple[Creator, User] | None:

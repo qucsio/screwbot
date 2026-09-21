@@ -63,8 +63,10 @@ def main_menu(lang: Lang, creator_status: CreatorStatus | None = None) -> ReplyK
         titles.append(t("menu_creator_panel", lang))
     elif creator_status == CreatorStatus.pending:
         titles.append(t("menu_application_pending", lang))
-    else:
+    elif creator_status is None:
         titles.append(t("menu_become_creator", lang))
+    # blocked (заявка отклонена / исполнитель заблокирован): кнопки нет —
+    # повторная заявка не предусмотрена, а «на рассмотрении» было бы неправдой.
     return _build_keyboard(titles)
 
 
@@ -121,18 +123,26 @@ def genre_keyboard(lang: Lang, genres: list[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def work_card_keyboard(lang: Lang, work_id: int, catalog_type: str) -> InlineKeyboardMarkup:
+def work_card_keyboard(
+    lang: Lang, work_id: int, catalog_type: str, has_rent: bool = False
+) -> InlineKeyboardMarkup:
     nav = [InlineKeyboardButton(text=t("beat_prev", lang), callback_data="beatnav:prev")]
     if catalog_type == "beat":
         nav.append(InlineKeyboardButton(text=t("beat_listen", lang), callback_data=f"beat:listen:{work_id}"))
     nav.append(InlineKeyboardButton(text=t("beat_next", lang), callback_data="beatnav:next"))
+    # У бита с арендой клиент сразу выбирает, что покупает: аренду или выкуп.
+    if has_rent:
+        buy_row = [
+            InlineKeyboardButton(text=t("beat_rent_btn", lang), callback_data=f"beat:buy:{work_id}:rent"),
+            InlineKeyboardButton(text=t("beat_buyout_btn", lang), callback_data=f"beat:buy:{work_id}:buy"),
+        ]
+    else:
+        buy_row = [InlineKeyboardButton(text=t("beat_buy", lang), callback_data=f"beat:buy:{work_id}:buy")]
     return InlineKeyboardMarkup(
         inline_keyboard=[
             nav,
-            [
-                InlineKeyboardButton(text=t("beat_buy", lang), callback_data=f"beat:buy:{work_id}"),
-                InlineKeyboardButton(text=t("beat_ask", lang), callback_data=f"beat:ask:{work_id}"),
-            ],
+            buy_row,
+            [InlineKeyboardButton(text=t("beat_ask", lang), callback_data=f"beat:ask:{work_id}")],
         ]
     )
 

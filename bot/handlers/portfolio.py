@@ -17,7 +17,8 @@ from bot.db.repositories import portfolio as repo
 from bot.db.repositories.works import get_approved_creator
 from bot.filters import IsAdmin
 from bot.locales import t
-from bot.services.forms import cancel_kb, read_text
+from bot.services.forms import cancel_kb, read_text, skip_kb
+from bot.services.media import detect_media
 from bot.services.text import PORTFOLIO_CAPTION_MAX, esc
 from bot.states.portfolio import AddPortfolio
 
@@ -29,19 +30,6 @@ _INPUT_MEDIA = {
     MediaType.audio: InputMediaAudio,
     MediaType.document: InputMediaDocument,
 }
-
-
-def detect_media(message: Message):
-    """(MediaType, file_id) из сообщения или None, если это не медиа."""
-    if message.photo:
-        return MediaType.photo, message.photo[-1].file_id
-    if message.video:
-        return MediaType.video, message.video.file_id
-    if message.audio or message.voice:
-        return MediaType.audio, (message.audio or message.voice).file_id
-    if message.document:
-        return MediaType.document, message.document.file_id
-    return None
 
 
 def _caption(item, pos: int, total: int, lang: Lang) -> str:
@@ -123,7 +111,7 @@ async def portfolio_nav(call: CallbackQuery, state: FSMContext, session: AsyncSe
     data = await state.get_data()
     ids = data.get("port_ids") or []
     if not ids:
-        await call.answer()
+        await call.answer(t("button_outdated", user.lang))
         return
     idx = (data.get("port_idx", 0) + (1 if call.data.endswith("next") else -1)) % len(ids)
     item = await repo.get_item(session, ids[idx], creator.id)
@@ -155,24 +143,39 @@ async def portfolio_receive_media(message: Message, state: FSMContext, user: Use
     media_type, file_id = found
     await state.update_data(pf_type=media_type.value, pf_file=file_id)
     await state.set_state(AddPortfolio.caption)
-    await message.answer(t("portfolio_caption_prompt", user.lang), reply_markup=cancel_kb(user.lang))
+    await message.answer(t("portfolio_caption_prompt", user.lang), reply_markup=skip_kb(user.lang, "port:nocap"))
 
 
 @router.message(AddPortfolio.caption)
 async def portfolio_save(message: Message, state: FSMContext, session: AsyncSession, user: User):
+    if message.text is None:
+        # второй файл (например, из альбома) пришёл, пока ждём подпись к первому
+        await message.answer(t("portfolio_caption_need_text", user.lang),
+                             reply_markup=skip_kb(user.lang, "port:nocap"))
+        return
     text = await read_text(message, user.lang, PORTFOLIO_CAPTION_MAX)
     if text is None:
         return
-    caption = None if text == "-" else text
+    await _save_item(message, state, session, user, None if text == "-" else text)
+
+
+@router.callback_query(AddPortfolio.caption, F.data == "port:nocap")
+async def portfolio_save_no_caption(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    await _save_item(call.message, state, session, user, None)
+    await call.answer()
+
+
+async def _save_item(target: Message, state: FSMContext, session: AsyncSession, user: User,
+                     caption: str | None) -> None:
     data = await state.get_data()
     await state.clear()
     creator = await get_approved_creator(session, user.id)
     if creator is None:
-        await message.answer(t("portfolio_only_creator", user.lang))
+        await target.answer(t("portfolio_only_creator", user.lang))
         return
     await repo.add_item(session, creator.id, MediaType(data["pf_type"]), data["pf_file"], caption)
-    await message.answer(t("portfolio_saved", user.lang))
-    await open_portfolio(message, state, session, user)
+    await target.answer(t("portfolio_saved", user.lang))
+    await open_portfolio(target, state, session, user)
 
 
 @router.callback_query(F.data.startswith("port:del:"))
