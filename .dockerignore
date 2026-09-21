@@ -1,0 +1,12 @@
+# Секреты и мусор не должны попадать в образ: .env передаётся через env_file
+# в docker-compose.yml, а не зашивается внутрь при сборке.
+.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+*.log

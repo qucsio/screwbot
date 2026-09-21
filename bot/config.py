@@ -5,7 +5,7 @@
 """
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     # Redis
     redis_host: str = Field(default="redis", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
+
+    @field_validator("telegram_proxy")
+    @classmethod
+    def _check_proxy(cls, value: str) -> str:
+        """Понятная ошибка при старте вместо трейсбека из недр python_socks."""
+        value = value.strip().strip("\"'")
+        if value and not value.startswith(("socks5://", "socks4://", "http://")):
+            raise ValueError(
+                "TELEGRAM_PROXY должен начинаться с socks5://, socks4:// или http:// "
+                "(например socks5://user:pass@1.2.3.4:1080) либо быть пустым. "
+                "MTProto-прокси (tg://proxy, secret=...) для ботов не подходят."
+            )
+        return value
 
     @property
     def database_url(self) -> str:
