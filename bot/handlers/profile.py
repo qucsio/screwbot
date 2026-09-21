@@ -15,7 +15,8 @@ from bot.db.models import Creator, ModerationStatus, User
 from bot.db.repositories import portfolio as portfolio_repo
 from bot.db.repositories import works as repo
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text
+from bot.services.forms import cancel_kb, read_text
+from bot.services.text import EXPERIENCE_MAX, SOCIALS_MAX, esc
 from bot.services.ui import replace_card
 from bot.states.profile import ProfileEdit
 
@@ -47,9 +48,9 @@ def _profile_keyboard(lang) -> InlineKeyboardMarkup:
 def _profile_text(creator: Creator, lang) -> str:
     return t(
         "profile_title", lang,
-        service=creator.service or "—",
-        socials=creator.socials or "—",
-        desc=creator.experience or "—",
+        service=esc(creator.service),
+        socials=esc(creator.socials, limit=SOCIALS_MAX),
+        desc=esc(creator.experience, limit=EXPERIENCE_MAX),
         balance=_money(creator.balance),
     )
 
@@ -122,9 +123,8 @@ async def edit_desc(call: CallbackQuery, state: FSMContext, user: User):
 
 @router.message(ProfileEdit.socials)
 async def save_socials(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, SOCIALS_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     creator = await _get_creator(session, user)
     if creator:
@@ -138,9 +138,8 @@ async def save_socials(message: Message, state: FSMContext, session: AsyncSessio
 
 @router.message(ProfileEdit.description)
 async def save_desc(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, EXPERIENCE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     creator = await _get_creator(session, user)
     if creator:
@@ -183,13 +182,13 @@ def _work_text(work, lang, ctype: str = "beat") -> str:
     if ctype in ("visual", "video"):
         return t(
             "work_detail_video" if ctype == "video" else "work_detail_visual", lang,
-            title=work.title, vtype=work.genre or "—",
+            title=esc(work.title), vtype=esc(work.genre),
             buy=_money(work.price_buy),
             status=_status_text(work.moderation_status, lang),
         )
     return t(
         "work_detail", lang,
-        title=work.title, genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
+        title=esc(work.title), genre=esc(work.genre), key=esc(work.key), bpm=work.bpm or "—",
         rent=_money(work.price_rent), buy=_money(work.price_buy),
         status=_status_text(work.moderation_status, lang),
     )

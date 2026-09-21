@@ -1,5 +1,3 @@
-from decimal import Decimal, InvalidOperation
-
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -11,12 +9,13 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import app_config
-from bot.db.models import Lang, OrderStatus, User
+from bot.db.models import Lang, Order, OrderStatus, User
 from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_approved_creator
 from bot.locales import t
-from bot.services.notify import notify_admin, send_to_moderation
-from bot.services.order_view import contact, render_order_card
+from bot.services.money import parse_money
+from bot.services.notify import safe_send
+from bot.services.order_view import render_order_card
 from bot.states.orders import AdminPayout
 
 router = Router()
@@ -59,11 +58,16 @@ async def open_orders(
     await message.answer(t(title_key, user.lang), reply_markup=_list_keyboard(orders, user.lang))
 
 
-def _viewer_for_order(user: User, order, creator_user) -> str:
-    """Роль-наблюдатель определяется по конкретному заказу (юзер может быть и тем, и тем)."""
+def _viewer_for_order(user: User, order, creator_user) -> str | None:
+    """Роль-наблюдатель определяется по конкретному заказу (юзер может быть и тем, и тем).
+
+    None — посторонний: callback_data можно подделать, а в карточке ТЗ и контакты.
+    """
     if creator_user and creator_user[1].id == user.id:
         return "creator"
-    return "client"
+    if order.client_id == user.id:
+        return "client"
+    return None
 
 
 def _with_back(kb: InlineKeyboardMarkup | None, lang: Lang) -> InlineKeyboardMarkup:
@@ -85,14 +89,17 @@ async def back_to_list(call: CallbackQuery, state: FSMContext, session: AsyncSes
 
 
 @router.callback_query(F.data.startswith("ord:open:"))
-async def open_card(call: CallbackQuery, session: AsyncSession, user: User):
+async def open_card(call: CallbackQuery, session: AsyncSession, user: User | None):
     order_id = int(call.data.split(":")[2])
-    bundle = await repo.get_full(session, order_id)
+    bundle = await repo.get_full(session, order_id) if user else None
     if bundle is None:
         await call.answer()
         return
     order, client, category, creator_user = bundle
     viewer = _viewer_for_order(user, order, creator_user)
+    if viewer is None:
+        await call.answer()
+        return
     text, kb = render_order_card(order, client, category, creator_user, viewer, user.lang)
     await call.message.edit_text(text, reply_markup=_with_back(kb, user.lang))
     await call.answer()
@@ -106,7 +113,7 @@ async def open_card(call: CallbackQuery, session: AsyncSession, user: User):
 async def _push_card(bot: Bot, tg_id: int, bundle, viewer: str, lang: Lang):
     order, client, category, creator_user = bundle
     text, kb = render_order_card(order, client, category, creator_user, viewer, lang)
-    await bot.send_message(tg_id, text, reply_markup=kb)
+    await safe_send(bot.send_message(tg_id, text, reply_markup=kb))
 
 
 async def _refresh(call: CallbackQuery, bundle, viewer: str, lang: Lang, with_back: bool = True):
@@ -137,8 +144,8 @@ async def confirm_creator(call: CallbackQuery, session: AsyncSession, user: User
 
     await _refresh(call, bundle, "client", user.lang)
     if creator_user:
-        await bot.send_message(creator_user[1].tg_id,
-                               t("notify_creator_confirmed", creator_user[1].lang, order_id=order_id))
+        await safe_send(bot.send_message(creator_user[1].tg_id,
+                                         t("notify_creator_confirmed", creator_user[1].lang, order_id=order_id)))
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
     await call.answer()
 
@@ -176,7 +183,7 @@ async def demo_done(call: CallbackQuery, session: AsyncSession, user: User, bot:
     bundle = await repo.get_full(session, order_id)
 
     await _refresh(call, bundle, "creator", user.lang)
-    await bot.send_message(client.tg_id, t("notify_demo_to_client", client.lang, order_id=order_id))
+    await safe_send(bot.send_message(client.tg_id, t("notify_demo_to_client", client.lang, order_id=order_id)))
     await _push_card(bot, client.tg_id, bundle, "client", client.lang)
     await call.answer()
 
@@ -194,8 +201,8 @@ async def approve_demo(call: CallbackQuery, session: AsyncSession, user: User, b
 
     await _refresh(call, bundle, "client", user.lang)
     if creator_user:
-        await bot.send_message(creator_user[1].tg_id,
-                               t("notify_demo_approved_creator", creator_user[1].lang, order_id=order_id))
+        await safe_send(bot.send_message(creator_user[1].tg_id,
+                                         t("notify_demo_approved_creator", creator_user[1].lang, order_id=order_id)))
     await call.answer()
 
 
@@ -208,7 +215,7 @@ async def client_paid(call: CallbackQuery, session: AsyncSession, user: User, bo
         await call.answer()
         return
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
-    await bot.send_message(app_config.ADMIN_ID, t("notify_paid_admin", Lang.ru, order_id=order_id))
+    await safe_send(bot.send_message(app_config.ADMIN_ID, t("notify_paid_admin", Lang.ru, order_id=order_id)))
     # Убираем кнопку, чтобы клиент не слал повторные пинги админу.
     try:
         await call.message.edit_reply_markup(reply_markup=None)
@@ -218,13 +225,19 @@ async def client_paid(call: CallbackQuery, session: AsyncSession, user: User, bo
 
 
 @router.callback_query(F.data.startswith("ord:final:"))
-async def admin_final(call: CallbackQuery, state: FSMContext):
+async def admin_final(call: CallbackQuery, state: FSMContext, session: AsyncSession):
     if call.from_user.id != app_config.ADMIN_ID:
         await call.answer()
         return
     order_id = int(call.data.split(":")[2])
+    order = await session.get(Order, order_id)
+    if order is None or order.status != OrderStatus.await_final:
+        # Кнопка со старой карточки (заказ уже закрыт) — второй выплаты не будет.
+        await call.answer(t("admin_final_unavailable", Lang.ru, order_id=order_id), show_alert=True)
+        return
     await state.set_state(AdminPayout.amount)
-    await state.update_data(order_id=order_id)
+    # Карточку запоминаем, чтобы после выплаты убрать с неё кнопку подтверждения.
+    await state.update_data(order_id=order_id, card_chat=call.message.chat.id, card_msg=call.message.message_id)
     await call.message.answer(t("admin_enter_payout", Lang.ru, order_id=order_id))
     await call.answer()
 
@@ -233,32 +246,34 @@ async def admin_final(call: CallbackQuery, state: FSMContext):
 async def admin_payout(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
     if message.from_user.id != app_config.ADMIN_ID:
         return
-    raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
-    try:
-        amount = Decimal(raw)
-    except InvalidOperation:
+    amount = parse_money(message.text, allow_zero=True)
+    if amount is None:
         await message.answer(t("admin_payout_invalid", Lang.ru))
         return
     data = await state.get_data()
     order_id = data["order_id"]
     await state.clear()
 
+    if not await repo.complete_with_payout(session, order_id, amount):
+        await message.answer(t("admin_final_unavailable", Lang.ru, order_id=order_id))
+        return
+
     bundle = await repo.get_full(session, order_id)
     order, client, category, creator_user = bundle
-    order.status = OrderStatus.completed
-    if creator_user:
-        creator, creator_user_obj = creator_user
-        creator.balance = (creator.balance or Decimal(0)) + amount
-        await session.commit()
-        await bot.send_message(
+    if creator_user and amount > 0:
+        creator_user_obj = creator_user[1]
+        await safe_send(bot.send_message(
             creator_user_obj.tg_id,
             t("creator_balance_credited", creator_user_obj.lang, order_id=order_id, amount=amount)
             + t("review_upload_hint", creator_user_obj.lang),
-        )
-    else:
-        await session.commit()
+        ))
+    await safe_send(bot.send_message(client.tg_id, t("client_order_completed", client.lang, order_id=order_id)))
 
-    await bot.send_message(client.tg_id, t("client_order_completed", client.lang, order_id=order_id))
+    if data.get("card_msg"):
+        text, kb = render_order_card(order, client, category, creator_user, "admin", Lang.ru)
+        await safe_send(bot.edit_message_text(
+            text, chat_id=data["card_chat"], message_id=data["card_msg"], reply_markup=kb,
+        ))
     await message.answer(t("admin_final_done", Lang.ru, order_id=order_id, amount=amount))
 
 
@@ -278,8 +293,8 @@ async def cancel_order(call: CallbackQuery, session: AsyncSession, user: User, b
 
     await _refresh(call, bundle, "client", user.lang)
     if prev_creator:
-        await bot.send_message(prev_creator[1].tg_id,
-                               t("order_cancelled_client", prev_creator[1].lang, order_id=order_id))
+        await safe_send(bot.send_message(prev_creator[1].tg_id,
+                                         t("order_cancelled_client", prev_creator[1].lang, order_id=order_id)))
     await _push_card(bot, app_config.ADMIN_ID, bundle, "admin", Lang.ru)
     await call.answer()
 

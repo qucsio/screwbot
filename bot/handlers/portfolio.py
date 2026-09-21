@@ -15,8 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.db.models import Lang, MediaType, User
 from bot.db.repositories import portfolio as repo
 from bot.db.repositories.works import get_approved_creator
+from bot.filters import IsAdmin
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text
+from bot.services.forms import cancel_kb, read_text
+from bot.services.text import PORTFOLIO_CAPTION_MAX, esc
 from bot.states.portfolio import AddPortfolio
 
 router = Router()
@@ -43,7 +45,7 @@ def detect_media(message: Message):
 
 
 def _caption(item, pos: int, total: int, lang: Lang) -> str:
-    tail = f"\n{item.caption}" if item.caption else ""
+    tail = f"\n{esc(item.caption, limit=PORTFOLIO_CAPTION_MAX)}" if item.caption else ""
     return t("portfolio_card", lang, pos=pos, total=total, caption=tail)
 
 
@@ -158,9 +160,8 @@ async def portfolio_receive_media(message: Message, state: FSMContext, user: Use
 
 @router.message(AddPortfolio.caption)
 async def portfolio_save(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    text = guard_text(message)
+    text = await read_text(message, user.lang, PORTFOLIO_CAPTION_MAX)
     if text is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     caption = None if text == "-" else text
     data = await state.get_data()
@@ -206,7 +207,8 @@ def _admin_view_kb(creator_id: int, idx: int, total: int) -> InlineKeyboardMarku
     )
 
 
-@router.callback_query(F.data.startswith("pfopen:"))
+# IsAdmin: просмотр чужого портфолио — только админу (callback_data можно подделать).
+@router.callback_query(F.data.startswith("pfopen:"), IsAdmin())
 async def admin_portfolio_open(call: CallbackQuery, session: AsyncSession):
     creator_id = int(call.data.split(":")[1])
     items = await repo.list_items(session, creator_id)
@@ -218,7 +220,7 @@ async def admin_portfolio_open(call: CallbackQuery, session: AsyncSession):
     await call.answer()
 
 
-@router.callback_query(F.data.startswith("pfv:"))
+@router.callback_query(F.data.startswith("pfv:"), IsAdmin())
 async def admin_portfolio_nav(call: CallbackQuery, session: AsyncSession):
     _, cid_raw, idx_raw = call.data.split(":")
     creator_id, idx = int(cid_raw), int(idx_raw)

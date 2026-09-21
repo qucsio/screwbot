@@ -10,8 +10,10 @@ from bot.db.repositories import orders as repo
 from bot.db.repositories.works import get_approved_creator, get_category_by_code
 from bot.keyboards.orders import take_order_keyboard
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text, step_text
-from bot.services.order_view import contact, render_order_card
+from bot.services.forms import cancel_kb, read_text, step_text
+from bot.services.notify import safe_send
+from bot.services.order_view import brief_text, contact, render_order_card
+from bot.services.text import BRIEF_FIELD_MAX
 from bot.states.orders import OrderForm
 
 router = Router()
@@ -51,9 +53,11 @@ async def fill_step(message: Message, state: FSMContext, session: AsyncSession, 
     brief = data["brief"]
     fields = by_code(code).fields
 
-    value = guard_text(message)
+    value = await read_text(
+        message, user.lang, BRIEF_FIELD_MAX,
+        need_key="order_need_text", too_long_key="order_text_too_long",
+    )
     if value is None:
-        await message.answer(t("order_need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     brief[fields[step].key] = value
     step += 1
@@ -124,12 +128,10 @@ async def order_attachments_done(call: CallbackQuery, state: FSMContext, session
 
 
 async def publish_tender(bot: Bot, session: AsyncSession, order: Order, category: Category, client: User):
-    fields = by_code(category.code).fields
-    body = "\n".join(f"• {f.label}: {order.brief.get(f.key, '—')}" for f in fields)
     text = t(
         "tender_card", Lang.ru,
         title=category.title_ru, order_id=order.id,
-        contact=contact(client), body=body,
+        contact=contact(client), body=brief_text(category.code, order.brief),
     )
     sent = await bot.send_message(
         app_config.GROUP_ID,
@@ -194,6 +196,6 @@ async def take_order(call: CallbackQuery, session: AsyncSession, user: User | No
     bundle = await repo.get_full(session, order_id)
     order, client, category, creator_user = bundle
     text, kb = render_order_card(order, client, category, creator_user, "client", client.lang)
-    await bot.send_message(client.tg_id, text, reply_markup=kb)
+    await safe_send(bot.send_message(client.tg_id, text, reply_markup=kb))
 
     await call.answer(t("order_taken_ok", user.lang, order_id=order_id))

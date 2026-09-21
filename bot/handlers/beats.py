@@ -5,9 +5,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto, InputMediaVideo, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot import app_config
 from bot.categories import by_code
 from bot.db.models import Creator, Lang, ModerationStatus, User, Work
 from bot.db.repositories import works as repo
+from bot.filters import IsAdmin
 from bot.keyboards.common import (
     filter_intro_keyboard,
     genre_keyboard,
@@ -15,8 +17,9 @@ from bot.keyboards.common import (
     work_moderation_keyboard,
 )
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text, step
+from bot.services.forms import cancel_kb, guard_text, read_text, step
 from bot.services.notify import notify_admin, send_work_to_moderation
+from bot.services.text import QUESTION_MAX, esc
 from bot.states.beats import AddBeat, AddVideo, AddVisual, BeatFilter
 
 _BEAT_STEPS = 8
@@ -183,8 +186,8 @@ async def addbeat_price_buy(
     await message.answer(t("addbeat_sent", user.lang))
     card = t(
         "mod_new_beat", Lang.ru,
-        author=_contact(user), title=work.title,
-        genre=work.genre, key=work.key, bpm=work.bpm,
+        author=_contact(user), title=esc(work.title),
+        genre=esc(work.genre), key=esc(work.key), bpm=work.bpm,
         rent=_money(work.price_rent), buy=_money(work.price_buy),
     )
     await send_work_to_moderation(
@@ -334,8 +337,8 @@ async def addvisual_price_buy(
     await message.answer(t("addvisual_sent", user.lang))
     card = t(
         "mod_new_visual", Lang.ru,
-        author=_contact(user), title=work.title,
-        vtype=work.genre, buy=_money(work.price_buy),
+        author=_contact(user), title=esc(work.title),
+        vtype=esc(work.genre), buy=_money(work.price_buy),
     )
     await send_work_to_moderation(
         bot, card, work.cover_file_id,
@@ -429,8 +432,8 @@ async def addvideo_price_buy(
     await message.answer(t("addvideo_sent", user.lang))
     card = t(
         "mod_new_video", Lang.ru,
-        author=_contact(user), title=work.title,
-        vtype=work.genre, buy=_money(work.price_buy),
+        author=_contact(user), title=esc(work.title),
+        vtype=esc(work.genre), buy=_money(work.price_buy),
     )
     await send_work_to_moderation(
         bot, card, work.cover_file_id,
@@ -444,7 +447,8 @@ async def addvideo_price_buy(
 # =========================================================================
 
 
-@router.callback_query(F.data.startswith("modwork:"))
+# IsAdmin: callback_data можно подделать и одобрить свою же работу.
+@router.callback_query(F.data.startswith("modwork:"), IsAdmin())
 async def moderate_work(call: CallbackQuery, session: AsyncSession, bot: Bot):
     _, action, work_id_raw = call.data.split(":")
     pair = await repo.get_work_with_author(session, int(work_id_raw))
@@ -456,11 +460,11 @@ async def moderate_work(call: CallbackQuery, session: AsyncSession, bot: Bot):
     if action == "approve":
         work.moderation_status = ModerationStatus.approved
         admin_msg = t("mod_approved_admin", Lang.ru)
-        notify = t("work_approved_notify", author.lang, title=work.title)
+        notify = t("work_approved_notify", author.lang, title=esc(work.title))
     else:
         work.moderation_status = ModerationStatus.rejected
         admin_msg = t("mod_rejected_admin", Lang.ru)
-        notify = t("work_rejected_notify", author.lang, title=work.title)
+        notify = t("work_rejected_notify", author.lang, title=esc(work.title))
     await session.commit()
 
     try:
@@ -468,12 +472,13 @@ async def moderate_work(call: CallbackQuery, session: AsyncSession, bot: Bot):
     except Exception:
         pass
 
-    # карточка может быть фото (с подписью) или текстом
+    # карточка может быть фото (с подписью) или текстом; html_text берёт и подпись,
+    # и текст с сохранением разметки и экранированием
     try:
         if call.message.caption is not None:
-            await call.message.edit_caption(caption=f"{call.message.caption}\n\n— {admin_msg}")
+            await call.message.edit_caption(caption=f"{call.message.html_text}\n\n— {admin_msg}")
         else:
-            await call.message.edit_text(f"{call.message.text}\n\n— {admin_msg}")
+            await call.message.edit_text(f"{call.message.html_text}\n\n— {admin_msg}")
     except Exception:
         pass
     await call.answer(admin_msg)
@@ -516,6 +521,8 @@ async def filter_setup(call: CallbackQuery, state: FSMContext, session: AsyncSes
     genres = await repo.approved_beat_genres(session, data["category_id"])
     single_field = data.get("ctype") in _SINGLE_FIELD_TYPES
     await state.set_state(BeatFilter.genre)
+    # в кнопках — индексы жанров (лимит callback_data 64 байта), сами жанры — тут
+    await state.update_data(f_genres=genres)
     await call.message.edit_text(
         t("filter_type" if single_field else "filter_genre", user.lang),
         reply_markup=genre_keyboard(user.lang, genres),
@@ -525,8 +532,17 @@ async def filter_setup(call: CallbackQuery, state: FSMContext, session: AsyncSes
 
 @router.callback_query(BeatFilter.genre, F.data.startswith("fltgenre:"))
 async def filter_pick_genre(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
-    genre = call.data.split(":", 1)[1]
-    await state.update_data(f_genre=None if genre == "__any__" else genre)
+    raw = call.data.split(":", 1)[1]
+    data = await state.get_data()
+    genre = None
+    if raw != "__any__":
+        genres = data.get("f_genres") or []
+        idx = int(raw) if raw.isdigit() else -1
+        if not 0 <= idx < len(genres):
+            await call.answer()
+            return
+        genre = genres[idx]
+    await state.update_data(f_genre=genre)
     data = await state.get_data()
     # у визуалов и видео фильтр только по типу — сразу показываем результаты
     if data.get("ctype") in _SINGLE_FIELD_TYPES:
@@ -589,22 +605,22 @@ async def _render_caption(session: AsyncSession, work_id: int, pos: int, total: 
     if ctype == "video":
         caption = t(
             "video_card", lang,
-            title=work.title, author=_contact(author),
-            vtype=work.genre or "—", buy=_money(work.price_buy),
+            title=esc(work.title), author=_contact(author),
+            vtype=esc(work.genre), buy=_money(work.price_buy),
             pos=pos, total=total,
         )
     elif ctype == "visual":
         caption = t(
             "visual_card", lang,
-            title=work.title, author=_contact(author),
-            vtype=work.genre or "—", buy=_money(work.price_buy),
+            title=esc(work.title), author=_contact(author),
+            vtype=esc(work.genre), buy=_money(work.price_buy),
             pos=pos, total=total,
         )
     else:
         caption = t(
             "beat_card", lang,
-            title=work.title, author=_contact(author),
-            genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
+            title=esc(work.title), author=_contact(author),
+            genre=esc(work.genre), key=esc(work.key), bpm=work.bpm or "—",
             rent=_money(work.price_rent), buy=_money(work.price_buy),
             pos=pos, total=total,
         )
@@ -645,11 +661,17 @@ async def carousel_nav(call: CallbackQuery, state: FSMContext, session: AsyncSes
     await call.answer()
 
 
+def _can_listen(work: Work, author: User, tg_id: int) -> bool:
+    """Одобренную работу слушают все; неопубликованную — только автор и админ
+    (callback_data можно подделать и выкачать чужой трек с модерации)."""
+    return work.moderation_status == ModerationStatus.approved or tg_id in (app_config.ADMIN_ID, author.tg_id)
+
+
 @router.callback_query(F.data.startswith("beat:listen:"))
 async def beat_listen(call: CallbackQuery, session: AsyncSession, user: User):
     work_id = int(call.data.split(":")[2])
     pair = await repo.get_work_with_author(session, work_id)
-    if pair and pair[0].audio_file_id:
+    if pair and pair[0].audio_file_id and _can_listen(pair[0], pair[1], call.from_user.id):
         await call.message.answer_audio(pair[0].audio_file_id, title=pair[0].title)
     await call.answer()
 
@@ -669,7 +691,7 @@ async def beat_buy(call: CallbackQuery, session: AsyncSession, user: User, bot: 
         prices = f"Цена: {_money(work.price_buy)} ₽"
     text = t(
         "mod_beat_buy", Lang.ru,
-        title=work.title, work_id=work.id,
+        title=esc(work.title), work_id=work.id,
         contact=_contact(user), author=_contact(author),
         prices=prices,
     )
@@ -684,17 +706,20 @@ async def beat_ask(call: CallbackQuery, state: FSMContext, session: AsyncSession
     title = pair[0].title if pair else "—"
     await state.set_state(BeatQuestion.waiting)
     await state.update_data(ask_work_id=work_id, ask_title=title)
-    await call.message.answer(t("beat_ask_prompt", user.lang, title=title), reply_markup=cancel_kb(user.lang))
+    await call.message.answer(t("beat_ask_prompt", user.lang, title=esc(title)), reply_markup=cancel_kb(user.lang))
     await call.answer()
 
 
 @router.message(BeatQuestion.waiting)
 async def beat_ask_send(message: Message, state: FSMContext, user: User, bot: Bot):
+    question = await read_text(message, user.lang, QUESTION_MAX)
+    if question is None:
+        return
     data = await state.get_data()
     text = t(
         "mod_beat_question", Lang.ru,
-        title=data.get("ask_title", "—"), work_id=data.get("ask_work_id"),
-        contact=_contact(user), text=message.text or "—",
+        title=esc(data.get("ask_title")), work_id=data.get("ask_work_id"),
+        contact=_contact(user), text=esc(question),
     )
     await notify_admin(bot, text)
     await state.set_state(None)

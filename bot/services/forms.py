@@ -54,6 +54,31 @@ def guard_text(message: Message) -> str | None:
     return txt.strip()
 
 
+async def read_text(
+    message: Message,
+    lang: Lang,
+    max_len: int,
+    need_key: str = "need_text",
+    too_long_key: str = "text_too_long",
+) -> str | None:
+    """Текст шага с проверкой длины или None — пользователю уже ответили, что не так.
+
+    Длина ограничена, чтобы итоговое сообщение (тендер, карточка, подпись к медиа)
+    влезло в лимиты Telegram — иначе оно просто не отправится.
+    """
+    value = guard_text(message)
+    if value is None:
+        await message.answer(t(need_key, lang), reply_markup=cancel_kb(lang))
+        return None
+    if len(value) > max_len:
+        await message.answer(
+            t(too_long_key, lang, length=len(value), limit=max_len),
+            reply_markup=cancel_kb(lang),
+        )
+        return None
+    return value
+
+
 @router.callback_query(F.data == "form_cancel")
 async def form_cancel(
     call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User | None

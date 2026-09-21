@@ -16,6 +16,10 @@ from bot.db.models import Creator, CreatorStatus, Lang, Order, User
 from bot.db.repositories import works as repo
 from bot.filters import IsAdmin
 from bot.locales import t
+from bot.services.forms import read_text
+from bot.services.money import parse_money
+from bot.services.order_view import contact as _contact
+from bot.services.text import EXPERIENCE_MAX, SERVICE_MAX, SOCIALS_MAX, esc
 from bot.services.ui import replace_card
 from bot.states.admin import AdminStates
 
@@ -28,12 +32,6 @@ L = Lang.ru  # админ-панель всегда на русском
 
 def _money(v) -> str:
     return f"{v:g}" if v is not None else "—"
-
-
-def _contact(user: User) -> str:
-    if user.username:
-        return f"@{user.username}"
-    return f'<a href="tg://user?id={user.tg_id}">{user.nickname or "профиль"}</a>'
 
 
 # =========================================================================
@@ -122,8 +120,8 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
 def _creator_card_text(creator: Creator, user: User) -> str:
     return t(
         "adm_creator_card", L,
-        cid=creator.id, contact=_contact(user), nickname=user.nickname or "—",
-        service=creator.service or "—", status=_cstatus(creator.status),
+        cid=creator.id, contact=_contact(user), nickname=esc(user.nickname),
+        service=esc(creator.service), status=_cstatus(creator.status),
         balance=_money(creator.balance),
     )
 
@@ -204,10 +202,9 @@ async def adm_balance_ask(call: CallbackQuery, state: FSMContext):
 
 @router.message(AdminStates.writeoff)
 async def adm_balance_save(message: Message, state: FSMContext, session: AsyncSession):
-    raw = (message.text or "").strip().replace(",", ".").replace(" ", "")
-    try:
-        amount = Decimal(raw)
-    except InvalidOperation:
+    # направление задаёт кнопка (начислить/списать), поэтому сумма всегда положительная
+    amount = parse_money(message.text)
+    if amount is None:
         await message.answer(t("adm_writeoff_invalid", L))
         return
     data = await state.get_data()
@@ -253,6 +250,8 @@ async def adm_add_creator_save(message: Message, state: FSMContext, session: Asy
 # --- Правка профиля исполнителя админом ----------------------------------
 
 _EF_FIELDS = {"service": "service", "socials": "socials", "desc": "experience"}
+# те же лимиты, что у исполнителя: карточки и профиль должны влезать в сообщение
+_EF_MAX = {"service": SERVICE_MAX, "socials": SOCIALS_MAX, "experience": EXPERIENCE_MAX}
 
 
 @router.callback_query(F.data.startswith("adm:cprofile:"))
@@ -283,11 +282,14 @@ async def adm_creator_edit_ask(call: CallbackQuery, state: FSMContext):
 @router.message(AdminStates.creator_field)
 async def adm_creator_edit_save(message: Message, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
+    value = await read_text(message, L, _EF_MAX[data["field"]])
+    if value is None:
+        return
     await state.clear()
     creator = await session.get(Creator, data["creator_id"])
     if creator is None:
         return
-    setattr(creator, data["field"], (message.text or "").strip())
+    setattr(creator, data["field"], value)
     await session.commit()
     await message.answer(t("adm_profile_saved", L))
 
@@ -406,15 +408,15 @@ def _work_card_content(work, author, ctype: str = "beat") -> tuple[str | None, s
     if ctype in ("visual", "video"):
         text = t(
             "adm_work_card_video" if ctype == "video" else "adm_work_card_visual", L,
-            title=work.title, wid=work.id, author=_contact(author),
-            vtype=work.genre or "—", buy=_money(work.price_buy),
+            title=esc(work.title), wid=work.id, author=_contact(author),
+            vtype=esc(work.genre), buy=_money(work.price_buy),
             status=t(f"status_{work.moderation_status.value}", L),
         )
     else:
         text = t(
             "adm_work_card", L,
-            title=work.title, wid=work.id, author=_contact(author),
-            genre=work.genre or "—", key=work.key or "—", bpm=work.bpm or "—",
+            title=esc(work.title), wid=work.id, author=_contact(author),
+            genre=esc(work.genre), key=esc(work.key), bpm=work.bpm or "—",
             rent=_money(work.price_rent), buy=_money(work.price_buy),
             status=t(f"status_{work.moderation_status.value}", L),
         )
@@ -468,6 +470,8 @@ async def adm_work_delete(call: CallbackQuery, session: AsyncSession):
 
 
 _NUMERIC_FIELDS = {"price_rent", "price_buy", "bpm"}
+# длины колонок works.genre / works.key — длиннее БД не примет
+_TEXT_FIELD_MAX = {"genre": 64, "key": 16}
 
 
 @router.callback_query(F.data.startswith("adm:wf:"))
@@ -509,7 +513,9 @@ async def adm_work_field_save(message: Message, state: FSMContext, session: Asyn
                 await message.answer(t("adm_value_invalid", L))
                 return
     else:
-        value = raw
+        value = await read_text(message, L, _TEXT_FIELD_MAX.get(field, 64))
+        if value is None:
+            return
 
     await state.clear()
     work = await repo.get_work(session, data["work_id"])

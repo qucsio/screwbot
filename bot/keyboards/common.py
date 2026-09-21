@@ -114,7 +114,9 @@ def filter_intro_keyboard(lang: Lang) -> InlineKeyboardMarkup:
 
 
 def genre_keyboard(lang: Lang, genres: list[str]) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text=g, callback_data=f"fltgenre:{g}")] for g in genres]
+    # В callback_data — индекс, а не сам жанр: лимит Telegram 64 байта, и кириллический
+    # жанр длиннее ~27 символов его превышает — тогда не отправляется вся клавиатура.
+    rows = [[InlineKeyboardButton(text=g, callback_data=f"fltgenre:{i}")] for i, g in enumerate(genres)]
     rows.append([InlineKeyboardButton(text=t("filter_any", lang), callback_data="fltgenre:__any__")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

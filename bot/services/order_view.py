@@ -9,6 +9,7 @@ from bot import app_config
 from bot.categories import by_code
 from bot.db.models import Category, Lang, Order, OrderStatus, User
 from bot.locales import t
+from bot.services.text import BRIEF_FIELD_MAX, esc
 
 # Статусы, в которых контакты уже раскрыты (после подтверждения предоплаты).
 _CONTACTS_OPEN = {
@@ -22,7 +23,17 @@ _CONTACTS_OPEN = {
 def contact(user: User) -> str:
     if user.username:
         return f"@{user.username}"
-    return f'<a href="tg://user?id={user.tg_id}">{user.nickname or "профиль"}</a>'
+    return f'<a href="tg://user?id={user.tg_id}">{esc(user.nickname, "профиль")}</a>'
+
+
+def brief_text(code: str, brief: dict | None) -> str:
+    """ТЗ строками «• Поле: ответ» — для тендера и карточки заказа."""
+    cdef = by_code(code)
+    if not cdef or not brief:
+        return ""
+    return "\n".join(
+        f"• {f.label}: {esc(brief.get(f.key), limit=BRIEF_FIELD_MAX)}" for f in cdef.fields
+    )
 
 
 def render_order_card(
@@ -39,11 +50,10 @@ def render_order_card(
     lines = [t("order_card_header", lang, order_id=order.id, title=title, status=status_label)]
 
     # ТЗ (для исполнителя и админа полезно; клиенту тоже не мешает)
-    cdef = by_code(category.code)
-    if cdef and order.brief:
-        body = "\n".join(f"• {f.label}: {order.brief.get(f.key, '—')}" for f in cdef.fields)
-        if body:
-            lines.append("\n" + body)
+    body = brief_text(category.code, order.brief)
+    if body:
+        lines.append("\n" + body)
+    if order.brief:
         attachments = order.brief.get("_attachments") or []
         if attachments:
             lines.append("\n" + t("order_card_attachments", lang, count=len(attachments)))

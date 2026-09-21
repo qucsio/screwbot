@@ -3,10 +3,14 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import Creator, CreatorStatus, Lang, User
+from bot.filters import IsAdmin
 from bot.keyboards.common import main_menu
 from bot.locales import t
 
 router = Router()
+# Кнопки модерации видит только админ, но callback_data можно подделать
+# (userbot шлёт любые данные) — поэтому проверяем, кто нажал.
+router.callback_query.filter(IsAdmin())
 
 
 @router.callback_query(F.data.startswith("modcreator:"))
@@ -36,5 +40,6 @@ async def moderate_creator(call: CallbackQuery, session: AsyncSession, bot: Bot)
     except Exception:
         pass
 
-    await call.message.edit_text(f"{call.message.text}\n\n— {admin_msg}")
+    # html_text, а не text: иначе «<» из заявки ломает правку, а жирный шрифт пропадает.
+    await call.message.edit_text(f"{call.message.html_text}\n\n— {admin_msg}")
     await call.answer(admin_msg)

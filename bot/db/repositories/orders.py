@@ -1,4 +1,6 @@
-from sqlalchemy import select, update
+from decimal import Decimal
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import Category, Creator, Order, OrderStatus, User
@@ -27,6 +29,32 @@ async def claim_order(session: AsyncSession, order_id: int, creator_id: int) -> 
     )
     await session.commit()
     return result.rowcount == 1
+
+
+async def complete_with_payout(session: AsyncSession, order_id: int, amount: Decimal) -> bool:
+    """Закрывает заказ и начисляет исполнителю amount — строго один раз.
+
+    Как и claim_order: UPDATE ... WHERE status='await_final'. Повторное
+    подтверждение (старая кнопка, вторая карточка, двойной клик) получит
+    0 строк и ничего не начислит.
+    """
+    result = await session.execute(
+        update(Order)
+        .where(Order.id == order_id, Order.status == OrderStatus.await_final)
+        .values(status=OrderStatus.completed)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        return False
+    creator_id = await session.scalar(select(Order.creator_id).where(Order.id == order_id))
+    if creator_id is not None and amount:
+        await session.execute(
+            update(Creator)
+            .where(Creator.id == creator_id)
+            .values(balance=func.coalesce(Creator.balance, 0) + amount)
+        )
+    await session.commit()
+    return True
 
 
 async def set_status(session: AsyncSession, order_id: int, status: OrderStatus) -> None:

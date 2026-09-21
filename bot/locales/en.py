@@ -60,6 +60,7 @@ TEXTS = {
     "form_cancel": "❌ Cancel",
     "form_step": "🔹 Step {n}/{total}",
     "need_text": "⚠️ Text required. Please reply with text.",
+    "text_too_long": "⚠️ Too long: {length} characters, the limit is {limit}. Please shorten it.",
     "need_photo": "⚠️ A photo is required. Send it as an image.",
     "need_media": "⚠️ Send media: photo, video, audio or file.",
     # Portfolio
@@ -151,6 +152,10 @@ TEXTS = {
         "⚠️ This step needs text. You'll be able to attach images and files at the end, "
         "after all the questions."
     ),
+    "order_text_too_long": (
+        "⚠️ Too long: {length} characters, the limit is {limit}. Please shorten your answer — "
+        "you can attach a detailed brief as a file at the end, after all the questions."
+    ),
     "order_published": "✅ Your order #{order_id} is published. Waiting for a creator to take it.",
     "order_attach_prompt": (
         "📎 Attach images or files to the brief (references, examples) — one per message. "
@@ -189,7 +194,7 @@ TEXTS = {
     "contacts_to_client": "🤝 Prepayment received!\nCreator contact: {contact}\nThey will reach out.",
     "admin_prepay_done": "Prepayment marked, contacts sent.",
     "admin_enter_payout": "Enter the payout amount for the creator on order #{order_id} (number):",
-    "admin_payout_invalid": "Enter the amount as a number.",
+    "admin_payout_invalid": "Enter the amount as a number, e.g. 1500 or 1500.50 (0 closes without a payout).",
     "admin_final_done": "Order #{order_id} closed, credited {amount} ₽.",
     "creator_balance_credited": "💵 For order #{order_id} you were credited {amount} ₽ (available for payout).",
     "client_order_completed": "🎉 Order #{order_id} completed. Thank you!",

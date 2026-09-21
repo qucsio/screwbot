@@ -18,8 +18,9 @@ from bot.keyboards.common import (
     settings_lang_keyboard,
 )
 from bot.locales import t
-from bot.services.forms import cancel_kb, guard_text, step
+from bot.services.forms import cancel_kb, guard_text, read_text, step
 from bot.services.notify import send_to_moderation
+from bot.services.text import EXPERIENCE_MAX, PORTFOLIO_LINKS_MAX, esc
 from bot.states.registration import CreatorApplication, Registration
 
 router = Router()
@@ -90,7 +91,7 @@ async def set_nickname(message: Message, state: FSMContext, session: AsyncSessio
     user.role = Role.client  # маркер завершённой регистрации; все — клиенты
     await session.commit()
     await state.clear()
-    await message.answer(t("client_registered", user.lang, nickname=user.nickname))
+    await message.answer(t("client_registered", user.lang, nickname=esc(user.nickname)))
     await _menu(message, session, user)
 
 
@@ -150,9 +151,8 @@ async def app_service(message: Message, state: FSMContext, user: User):
 
 @router.message(CreatorApplication.experience)
 async def app_experience(message: Message, state: FSMContext, user: User):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, EXPERIENCE_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     await state.update_data(experience=value)
     await state.set_state(CreatorApplication.portfolio)
@@ -172,10 +172,10 @@ async def _send_mod_card(bot: Bot, user: User, creator: Creator) -> None:
     card = t(
         "mod_new_creator", Lang.ru,
         contact=contact,
-        nickname=user.nickname or "—",
-        service=creator.service or "—",
-        experience=creator.experience or "—",
-        portfolio=creator.portfolio or "—",
+        nickname=esc(user.nickname),
+        service=esc(creator.service),
+        experience=esc(creator.experience, limit=EXPERIENCE_MAX),
+        portfolio=esc(creator.portfolio, limit=PORTFOLIO_LINKS_MAX),
     )
     await send_to_moderation(bot, card, moderation_keyboard(Lang.ru, creator.id))
 
@@ -184,9 +184,8 @@ async def _send_mod_card(bot: Bot, user: User, creator: Creator) -> None:
 async def app_portfolio(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
 ):
-    value = guard_text(message)
+    value = await read_text(message, user.lang, PORTFOLIO_LINKS_MAX)
     if value is None:
-        await message.answer(t("need_text", user.lang), reply_markup=cancel_kb(user.lang))
         return
     data = await state.get_data()
     creator = Creator(
