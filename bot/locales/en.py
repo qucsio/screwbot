@@ -226,7 +226,7 @@ TEXTS = {
     "order_paid_waiting": "Noted. Wait for the admin to confirm the payment.",
     "profile_only_creator": "⛔ The cabinet is available only to approved creators.",
     "profile_title": (
-        "👤 <b>Creator account</b>\n\nSocials: {socials}\n💵 Balance available: <b>{balance} ₽</b>"
+        "👤 <b>Creator account</b>\n\n🔗 Socials:\n{socials}\n\n💵 Balance available: <b>{balance} ₽</b>"
     ),
     "profile_counts": "🎵 Works: {works} · 🖼 Portfolio: {media}",
     "btn_edit_socials": "🔗 Socials",
@@ -364,7 +364,7 @@ TEXTS = {
     "need_direction_profile": "⛔ You need an approved profile in the '{direction}' direction. Apply via '🎨 Become a creator' or '➕ Add direction' in your account.",
     "profile_approved_notify": "🎉 Your '{direction}' profile is approved! You can now take orders and publish works in this direction.",
     "profile_rejected_notify": "❌ Your application for '{direction}' was declined.",
-    "profile_direction_card": "🎛 <b>{direction}</b>\nStatus: {status}\n\nExperience: {about}\nLinks: {links}",
+    "profile_direction_card": "🎛 <b>{direction}</b>\nStatus: {status}\n\n📝 Experience:\n{about}\n\n🔗 Links:\n{links}",
     "btn_add_direction": "➕ Add direction",
     "btn_edit_links": "🔗 Links",
     "profile_ask_links": "Send new links to your work in this direction:",
@@ -377,7 +377,8 @@ TEXTS = {
     "order_choose_creator": "👥 Pick a creator: you can view each profile and portfolio.\nThey will be tagged in the creators chat, but anyone can take the order — whoever taps first.",
     "order_creator_row": "{name} · works: {works}",
     "order_pick_any": "🎲 Doesn't matter, anyone can take it",
-    "order_creator_card": "👤 <b>{name}</b> · {direction}\n\nExperience: {about}\nLinks: {links}\nWorks in the catalog: {works}",
+    "order_creator_card": "👤 <b>{name}</b> · {direction}\n🎵 Works in the catalog: {works}\n\n📝 Experience:\n{about}\n\n🔗 Links:\n{links}",
     "btn_pick_creator": "✅ Pick this one",
     "order_invited_dm": "🔔 A client picked you for order #{order_id} '{title}'.\nIt is already in the creators chat — anyone in this direction can take it, be first:\n{link}",
+    # --- добавлено при аудите: навигация, форматы, заказы, админка ---
 }

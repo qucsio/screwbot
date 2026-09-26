@@ -237,7 +237,7 @@ TEXTS = {
     # --- Личный кабинет исполнителя ---
     "profile_only_creator": "⛔ Личный кабинет доступен только одобренным исполнителям.",
     "profile_title": (
-        "👤 <b>Личный кабинет</b>\n\nСоцсети: {socials}\n💵 Баланс к выводу: <b>{balance} ₽</b>"
+        "👤 <b>Личный кабинет</b>\n\n🔗 Соцсети:\n{socials}\n\n💵 Баланс к выводу: <b>{balance} ₽</b>"
     ),
     "profile_counts": "🎵 Работ: {works} · 🖼 Портфолио: {media}",
     "btn_edit_socials": "🔗 Соцсети",
@@ -477,13 +477,13 @@ TEXTS = {
     "need_direction_profile": "⛔ Нужен одобренный профиль по направлению «{direction}». Подайте заявку: «🎨 Стать исполнителем» или «➕ Добавить направление» в кабинете.",
     "profile_approved_notify": "🎉 Профиль «{direction}» одобрен! Теперь вы можете брать заказы и выкладывать работы по этому направлению.",
     "profile_rejected_notify": "❌ Заявка по направлению «{direction}» отклонена.",
-    "profile_direction_card": "🎛 <b>{direction}</b>\nСтатус: {status}\n\nОпыт: {about}\nСсылки: {links}",
+    "profile_direction_card": "🎛 <b>{direction}</b>\nСтатус: {status}\n\n📝 Опыт:\n{about}\n\n🔗 Ссылки:\n{links}",
     "btn_add_direction": "➕ Добавить направление",
     "btn_edit_links": "🔗 Ссылки",
     "profile_ask_links": "Пришлите новые ссылки на работы по этому направлению:",
     "portfolio_choose_direction": "Портфолио какого направления открыть?",
     "portfolio_empty_direction": "🖼 Портфолио по направлению «{direction}» пусто. Добавьте первый элемент.",
-    "mod_new_profile": "🆕 <b>Заявка исполнителя</b> · {direction}\n\nКонтакт: {contact}\nНик: {nickname}\nОпыт: {about}\nСсылки: {links}",
+    "mod_new_profile": "🆕 <b>Заявка исполнителя</b> · {direction}\n\nКонтакт: {contact}\nНик: {nickname}\n\n📝 Опыт:\n{about}\n\n🔗 Ссылки:\n{links}",
     "adm_creator_directions": "Направления:",
     "adm_creator_no_directions": "Направлений пока нет.",
     "adm_add_creator_direction": "Выберите направление для {contact}:",
@@ -491,8 +491,9 @@ TEXTS = {
     "order_choose_creator": "👥 Выберите исполнителя: у каждого можно посмотреть профиль и портфолио.\nЕго отметят в чате исполнителей, но взять заказ сможет любой — кто первым нажмёт «Взять заказ».",
     "order_creator_row": "{name} · работ: {works}",
     "order_pick_any": "🎲 Неважно, пусть возьмёт любой",
-    "order_creator_card": "👤 <b>{name}</b> · {direction}\n\nОпыт: {about}\nСсылки: {links}\nРабот в каталоге: {works}",
+    "order_creator_card": "👤 <b>{name}</b> · {direction}\n🎵 Работ в каталоге: {works}\n\n📝 Опыт:\n{about}\n\n🔗 Ссылки:\n{links}",
     "btn_pick_creator": "✅ Выбрать этого",
     "order_invited_dm": "🔔 Клиент выбрал вас для заказа #{order_id} «{title}».\nЗаказ уже в чате исполнителей — взять может любой по направлению, успейте первым:\n{link}",
     "tender_invited": "\n\n👤 Приглашён: {contact}",
+    # --- добавлено при аудите: навигация, форматы, заказы, админка ---
 }
