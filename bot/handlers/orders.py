@@ -4,17 +4,18 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import app_config
-from bot.categories import by_code
+from bot.categories import by_code, direction_by_code, direction_of
 from bot.db.models import Category, Lang, Order, OrderStatus, User
 from bot.db.repositories import orders as repo
-from bot.db.repositories.works import get_approved_creator, get_category_by_code
+from bot.db.repositories import profiles as profiles_repo
+from bot.db.repositories.works import get_category_by_code
 from bot.keyboards.orders import take_order_keyboard
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text, step_text
 from bot.services.media import MAX_ATTACHMENTS, detect_attachment, send_attachments
 from bot.services.notify import safe_send
 from bot.services.order_view import contact, render_order_card, tender_text
-from bot.services.text import BRIEF_FIELD_MAX
+from bot.services.text import BRIEF_FIELD_MAX, esc
 from bot.states.orders import OrderForm
 
 router = Router()
@@ -109,37 +110,142 @@ async def order_attachment(message: Message, state: FSMContext, user: User):
 
 @router.callback_query(OrderForm.attachments, F.data == "ordattach:done")
 async def order_attachments_done(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
+    """ТЗ готово — предлагаем выбрать исполнителя по профилям направления."""
+    data = await state.get_data()
+    direction = direction_of(data["code"])
+    profiles = await profiles_repo.list_approved_by_direction(session, direction)
+    if not profiles:
+        # выбирать не из кого — публикуем сразу
+        await _publish_order(call.message, state, session, user, bot, None)
+        await call.answer()
+        return
+    await state.set_state(OrderForm.choosing)
+    await call.message.answer(
+        t("order_choose_creator", user.lang),
+        reply_markup=await _creators_keyboard(session, profiles, direction, user.lang),
+    )
+    await call.answer()
+
+
+async def _creators_keyboard(session: AsyncSession, profiles, direction: str, lang: Lang):
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    rows = []
+    for profile, creator, owner in profiles:
+        works = await profiles_repo.count_approved_works(session, creator.id, direction)
+        name = owner.nickname or owner.username or f"#{creator.id}"
+        rows.append([InlineKeyboardButton(
+            text=t("order_creator_row", lang, name=name, works=works)[:60],
+            callback_data=f"ordpick:{profile.id}",
+        )])
+    rows.append([InlineKeyboardButton(text=t("order_pick_any", lang), callback_data="ordpick:any")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(OrderForm.choosing, F.data.startswith("ordpick:"))
+async def order_pick_creator(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
+    """Карточка исполнителя: описание, работы, портфолио — контакты не показываем."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    choice = call.data.split(":")[1]
+    if choice == "any":
+        await _publish_order(call.message, state, session, user, bot, None)
+        await call.answer()
+        return
+    if choice == "list":
+        data = await state.get_data()
+        direction = direction_of(data["code"])
+        profiles = await profiles_repo.list_approved_by_direction(session, direction)
+        await call.message.answer(
+            t("order_choose_creator", user.lang),
+            reply_markup=await _creators_keyboard(session, profiles, direction, user.lang),
+        )
+        await call.answer()
+        return
+
+    bundle = await profiles_repo.profile_with_owner(session, int(choice))
+    if bundle is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    profile, creator, owner = bundle
+    works = await profiles_repo.count_approved_works(session, creator.id, profile.direction)
+    cdef = direction_by_code(profile.direction)
+    text = t(
+        "order_creator_card", user.lang,
+        name=esc(owner.nickname or owner.username),
+        direction=cdef.title(user.lang) if cdef else profile.direction,
+        about=esc(profile.about, limit=BRIEF_FIELD_MAX),
+        links=esc(profile.links, limit=BRIEF_FIELD_MAX),
+        works=works,
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t("btn_view_portfolio", user.lang), callback_data=f"pfprof:{profile.id}")],
+        [InlineKeyboardButton(text=t("btn_pick_creator", user.lang), callback_data=f"ordsel:{profile.id}")],
+        [InlineKeyboardButton(text=t("btn_orders_back", user.lang), callback_data="ordpick:list")],
+    ])
+    await call.message.answer(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(OrderForm.choosing, F.data.startswith("ordsel:"))
+async def order_select_creator(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User, bot: Bot):
+    bundle = await profiles_repo.profile_with_owner(session, int(call.data.split(":")[1]))
+    if bundle is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    await _publish_order(call.message, state, session, user, bot, bundle)
+    await call.answer()
+
+
+async def _publish_order(target: Message, state: FSMContext, session: AsyncSession, user: User,
+                         bot: Bot, chosen) -> None:
+    """Создаёт заказ из данных формы и публикует тендер (с тегом выбранного)."""
     data = await state.get_data()
     await state.clear()
-    code = data["code"]
     brief = data["brief"]
     attachments = data.get("attachments", [])
     if attachments:
         brief["_attachments"] = attachments
-    category = await get_category_by_code(session, code)
+    category = await get_category_by_code(session, data["code"])
     order = Order(
         client_id=user.id,
         category_id=category.id,
         brief=brief,
         status=OrderStatus.published,
+        preferred_creator_id=chosen[1].id if chosen else None,
     )
     session.add(order)
     await session.commit()
 
-    await publish_tender(bot, session, order, category, user)
-    await call.message.answer(t("order_published", user.lang, order_id=order.id))
-    await call.answer()
+    invited = chosen[2] if chosen else None
+    await publish_tender(bot, session, order, category, user, invited)
+    await target.answer(t("order_published", user.lang, order_id=order.id))
 
 
-async def publish_tender(bot: Bot, session: AsyncSession, order: Order, category: Category, client: User):
+async def publish_tender(
+    bot: Bot, session: AsyncSession, order: Order, category: Category,
+    client: User, invited: User | None = None,
+):
+    text = tender_text(order, category, client)
+    if invited is not None:
+        # тег без форы: приглашённого зовём, но взять может любой по направлению
+        text += t("tender_invited", Lang.ru, contact=contact(invited))
     sent = await bot.send_message(
         app_config.GROUP_ID,
-        tender_text(order, category, client),
+        text,
         message_thread_id=category.thread_id,
         reply_markup=take_order_keyboard(Lang.ru, order.id),
     )
     order.tender_message_id = sent.message_id
     await session.commit()
+
+    if invited is not None:
+        link = f"https://t.me/c/{str(app_config.GROUP_ID).removeprefix('-100')}/{sent.message_id}"
+        await safe_send(bot.send_message(
+            invited.tg_id,
+            t("order_invited_dm", invited.lang, order_id=order.id,
+              title=category.title_en if invited.lang == Lang.en else category.title_ru, link=link),
+        ))
 
     # Вложения — альбомами и ответом на пост-тендер: в топике с несколькими
     # заказами они больше не перемешиваются с чужими.
@@ -163,12 +269,22 @@ async def take_order(call: CallbackQuery, session: AsyncSession, user: User | No
         # участник группы, ни разу не запускавший бота: раньше кнопка молча не работала
         await call.answer(t("order_take_need_start", Lang.ru), show_alert=True)
         return
-    creator = await get_approved_creator(session, user.id)
-    if creator is None:
-        await call.answer(t("order_take_only_creator", user.lang), show_alert=True)
+    bundle = await repo.get_full(session, order_id)
+    if bundle is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    # брать заказ может только исполнитель с одобренным профилем этого направления
+    direction = direction_of(bundle[2].code)
+    profile = await profiles_repo.approved_profile(session, user.id, direction)
+    if profile is None:
+        cdef = direction_by_code(direction)
+        await call.answer(
+            t("need_direction_profile", user.lang, direction=cdef.title(user.lang) if cdef else "—"),
+            show_alert=True,
+        )
         return
 
-    ok = await repo.claim_order(session, order_id, creator.id)
+    ok = await repo.claim_order(session, order_id, profile.creator_id)
     if not ok:
         await call.answer(t("order_already_taken", user.lang), show_alert=True)
         return

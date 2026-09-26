@@ -42,8 +42,8 @@ TEXTS = {
     "settings_choose_lang": "🌐 Choose the interface language:",
     "settings_lang_saved": "✅ Interface language updated.",
     # Creator application (from menu)
-    "become_creator_intro": "🎨 Let's fill in the creator application. Answer one message at a time.",
-    "creator_already_approved": "✅ You are already a creator. Open the '🎛 Creator panel'.",
+    "become_creator_intro": "🎨 Each direction is applied for separately.",
+    "creator_already_approved": "✅ You already work in this direction. Open the '🎛 Creator panel'.",
     "application_pending_info": "⏳ Your application is under review. The admin will contact you.",
     "creator_need_username": (
         "⚠️ An @username is required to apply — the admin uses it to reach you. "
@@ -226,11 +226,7 @@ TEXTS = {
     "order_paid_waiting": "Noted. Wait for the admin to confirm the payment.",
     "profile_only_creator": "⛔ The cabinet is available only to approved creators.",
     "profile_title": (
-        "👤 <b>Creator cabinet</b>\n\n"
-        "Service: {service}\n"
-        "Socials: {socials}\n"
-        "Description: {desc}\n\n"
-        "💵 Balance for payout: <b>{balance} ₽</b>"
+        "👤 <b>Creator account</b>\n\nSocials: {socials}\n💵 Balance available: <b>{balance} ₽</b>"
     ),
     "profile_counts": "🎵 Works: {works} · 🖼 Portfolio: {media}",
     "btn_edit_socials": "🔗 Socials",
@@ -239,12 +235,19 @@ TEXTS = {
     "btn_delete_profile": "🗑 Delete profile",
     "btn_delete_profile_yes": "🗑 Yes, delete my profile",
     "profile_delete_confirm": (
-        "⚠️ Delete your creator profile? This removes your works from the catalog and your portfolio. "
-        "This cannot be undone. You will remain a regular client."
+        "⚠️ Delete your creator profile?\nThis removes: directions — {directions}, catalog works — {works}, portfolio items — {media}.\nIt cannot be undone, and you will remain a regular client."
+    ),
+    "profile_delete_balance": (
+        "💵 Your balance is {balance} ₽ and will be lost. "
+        "Ask the admin for a payout first."
+    ),
+    "profile_delete_active_orders": (
+        "⛔ You have unfinished orders: {orders}. You can delete the profile once they are "
+        "completed or cancelled — otherwise clients are left without a creator."
     ),
     "profile_deleted": "🗑 Your creator profile has been deleted.",
     "profile_ask_socials": "Send your new social links in one message:",
-    "profile_ask_desc": "Send your new description:",
+    "profile_ask_desc": "Describe your experience in this direction in one message:",
     "profile_saved": "✅ Saved.",
     "works_empty": "You have no uploaded works yet.",
     "works_list_title": "🎵 Your works (tap to edit):",
@@ -352,4 +355,29 @@ TEXTS = {
     "beat_rent_btn": "💸 Lease",
     "beat_buyout_btn": "💰 Buyout",
     "beat_buy_already": "✅ Request already sent — the admin will contact you.",
+    # --- добавлено при аудите: навигация, форматы, заказы, админка ---
+    "app_choose_direction": "🎨 Pick a direction. Each one has its own application, moderation and portfolio.",
+    "app_all_directions": "You already have profiles in every direction — see their status in '👤 My profile'.",
+    "app_direction_taken": "You already have a profile in this direction.",
+    "app_ask_about": "Direction '{direction}'. Tell us about your experience: what you do, for how long, for whom.",
+    "app_ask_links": "Send links to your work in this direction in one message:",
+    "need_direction_profile": "⛔ You need an approved profile in the '{direction}' direction. Apply via '🎨 Become a creator' or '➕ Add direction' in your account.",
+    "profile_approved_notify": "🎉 Your '{direction}' profile is approved! You can now take orders and publish works in this direction.",
+    "profile_rejected_notify": "❌ Your application for '{direction}' was declined.",
+    "profile_direction_card": "🎛 <b>{direction}</b>\nStatus: {status}\n\nExperience: {about}\nLinks: {links}",
+    "btn_add_direction": "➕ Add direction",
+    "btn_edit_links": "🔗 Links",
+    "profile_ask_links": "Send new links to your work in this direction:",
+    "portfolio_choose_direction": "Which direction's portfolio should I open?",
+    "portfolio_empty_direction": "🖼 The '{direction}' portfolio is empty. Add the first item.",
+    "cstatus_pending": "⏳ under review",
+    "cstatus_approved": "✅ active",
+    "cstatus_blocked": "🚫 blocked",
+    # --- добавлено при аудите: навигация, форматы, заказы, админка ---
+    "order_choose_creator": "👥 Pick a creator: you can view each profile and portfolio.\nThey will be tagged in the creators chat, but anyone can take the order — whoever taps first.",
+    "order_creator_row": "{name} · works: {works}",
+    "order_pick_any": "🎲 Doesn't matter, anyone can take it",
+    "order_creator_card": "👤 <b>{name}</b> · {direction}\n\nExperience: {about}\nLinks: {links}\nWorks in the catalog: {works}",
+    "btn_pick_creator": "✅ Pick this one",
+    "order_invited_dm": "🔔 A client picked you for order #{order_id} '{title}'.\nIt is already in the creators chat — anyone in this direction can take it, be first:\n{link}",
 }

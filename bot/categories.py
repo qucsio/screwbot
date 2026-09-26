@@ -27,11 +27,37 @@ class Field:
 
 
 @dataclass(frozen=True)
+class DirectionDef:
+    """Направление работы исполнителя — на него заводится отдельный профиль.
+
+    Направление шире категории: «Готовые биты» и «Биты на заказ» — одно
+    направление, один профиль и одна модерация.
+    """
+    code: str
+    ru: str
+    en: str
+
+    def title(self, lang: Lang) -> str:
+        return self.en if lang == Lang.en else self.ru
+
+
+DIRECTIONS: list[DirectionDef] = [
+    DirectionDef("beats", "🎧 Биты и аранжировки", "🎧 Beats & arrangements"),
+    DirectionDef("mixing", "🎚️ Сведение и мастеринг", "🎚️ Mixing & mastering"),
+    DirectionDef("lyrics", "✍️ Тексты", "✍️ Lyrics"),
+    DirectionDef("visual", "🖼️ Визуал", "🖼️ Visuals"),
+    DirectionDef("video", "🎬 Видео", "🎬 Video"),
+    DirectionDef("photo", "📸 Фото", "📸 Photo"),
+]
+
+
+@dataclass(frozen=True)
 class CategoryDef:
     code: str
     ru: str                       # название кнопки/категории (RU)
     en: str                       # (EN)
     kind: str                     # "catalog" (готовые работы) | "custom" (заказ) | "static"
+    direction: str = ""           # код направления: кто имеет право брать/выкладывать
     thread_id: int = 0            # id топика-тендера в супергруппе (0 = не задан)
     fields: tuple[Field, ...] = ()  # шаги ТЗ для kind="custom"
     catalog_type: str = ""        # для kind="catalog": "beat" | "visual"
@@ -43,9 +69,10 @@ class CategoryDef:
 # Порядок в списке = порядок кнопок в главном меню.
 CATEGORIES: list[CategoryDef] = [
     CategoryDef("ready_beats", "🎧 Готовые аранжировки и биты", "🎧 Ready arrangements & beats",
-                "catalog", catalog_type="beat"),
+                "catalog", direction="beats", catalog_type="beat"),
     CategoryDef(
         "custom_beats", "🎶 Аранжировки и биты на заказ", "🎶 Custom arrangements & beats", "custom",
+        direction="beats",
         thread_id=2,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
@@ -58,6 +85,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "mixing", "🎚️ Mixing", "🎚️ Mixing", "custom",
+        direction="mixing",
         thread_id=46,  # ← id топика-тендера в супергруппе
         fields=(
             Field("tracks_count", "Количество дорожек:", "Number of tracks:", "Дорожек"),
@@ -69,6 +97,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "ghostwriting", "✍️ Текст (призрак-писатель)", "✍️ Lyrics (ghostwriter)", "custom",
+        direction="lyrics",
         thread_id=4,  # ← id топика-тендера в супергруппе
         fields=(
             Field("genre_style", "Жанр/стиль:", "Genre/style:", "Жанр/стиль"),
@@ -80,11 +109,12 @@ CATEGORIES: list[CategoryDef] = [
         ),
     ),
     CategoryDef("ready_visual", "🖼️ Готовые визуалы", "🖼️ Ready visuals",
-                "catalog", catalog_type="visual"),
+                "catalog", direction="visual", catalog_type="visual"),
     CategoryDef("ready_video", "🎬 Готовые видео", "🎬 Ready videos",
-                "catalog", catalog_type="video"),
+                "catalog", direction="video", catalog_type="video"),
     CategoryDef(
         "visual", "🖼️ Визуал (на заказ)", "🖼️ Visuals (custom)", "custom",
+        direction="visual",
         thread_id=6,  # ← id топика-тендера в супергруппе
         fields=(
             Field("type", "Тип (обложка, баннер, арт, 3D):", "Type (cover, banner, art, 3D):", "Тип"),
@@ -97,6 +127,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "videographer", "🎥 Видеограф", "🎥 Videographer", "custom",
+        direction="video",
         thread_id=8,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
@@ -108,6 +139,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "editing", "🎬 Монтаж", "🎬 Video editing", "custom",
+        direction="video",
         thread_id=50,  # ← id топика-тендера в супергруппе
         fields=(
             Field("video_type", "Тип видео:", "Video type:", "Тип видео"),
@@ -120,6 +152,7 @@ CATEGORIES: list[CategoryDef] = [
     ),
     CategoryDef(
         "photo", "📸 Фото-сессия", "📸 Photoshoot", "custom",
+        direction="photo",
         thread_id=53,  # ← id топика-тендера в супергруппе
         fields=(
             Field("city", "Город (укажите свой):", "City (specify yours):", "Город"),
@@ -133,6 +166,21 @@ CATEGORIES: list[CategoryDef] = [
 ]
 
 _BY_CODE = {c.code: c for c in CATEGORIES}
+_DIR_BY_CODE = {d.code: d for d in DIRECTIONS}
+
+
+def direction_by_code(code: str) -> DirectionDef | None:
+    return _DIR_BY_CODE.get(code)
+
+
+def direction_of(code: str) -> str:
+    """Направление категории («ready_beats» → «beats»)."""
+    cdef = _BY_CODE.get(code)
+    return cdef.direction if cdef else ""
+
+
+def categories_of_direction(direction: str) -> list[CategoryDef]:
+    return [c for c in CATEGORIES if c.direction == direction]
 
 
 def by_code(code: str) -> CategoryDef | None:

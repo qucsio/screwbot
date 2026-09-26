@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.categories import CATEGORIES
 from bot.db.models import CreatorStatus, Lang, User
-from bot.db.repositories.works import get_approved_creator, get_creator
+from bot.db.repositories import profiles as profiles_repo
+from bot.db.repositories.works import get_approved_creator
 from bot.handlers.beats import open_add_work, open_catalog
 from bot.handlers.order_flow import open_orders
 from bot.handlers.orders import start_order
@@ -79,8 +80,7 @@ async def menu_router(
         await message.answer(t("menu_creator_panel", user.lang), reply_markup=creator_panel(user.lang))
         return
     if _match(text, "menu_back_main"):
-        creator = await get_creator(session, user.id)
-        status = creator.status if creator else None
+        status = await profiles_repo.menu_status(session, user.id)
         await message.answer(t("main_menu", user.lang), reply_markup=main_menu(user.lang, status))
         return
     if _match(text, "menu_my_profile"):
@@ -112,15 +112,15 @@ async def menu_router(
         await open_settings(message, user)
         return
     if _match(text, "menu_become_creator"):
-        await start_creator_application(message, state, session, user)
+        await start_creator_application(message, state, session, user, message.from_user.username)
         return
     if _match(text, "menu_application_pending"):
-        creator = await get_creator(session, user.id)
-        if creator and creator.status == CreatorStatus.approved:
+        status = await profiles_repo.menu_status(session, user.id)
+        if status == CreatorStatus.approved:
             await message.answer(t("creator_already_approved", user.lang))
-        elif creator and creator.status == CreatorStatus.blocked:
+        elif status == CreatorStatus.blocked:
             await message.answer(t("creator_blocked_info", user.lang),
-                                 reply_markup=main_menu(user.lang, creator.status))
+                                 reply_markup=main_menu(user.lang, status))
         else:
             await message.answer(t("application_pending_info", user.lang))
         return
@@ -144,10 +144,9 @@ async def menu_router(
 
     # Ничего не подошло (свободный текст, стикер, пропала клавиатура) —
     # объясняем и возвращаем меню вместо молчания.
-    creator = await get_creator(session, user.id)
     await message.answer(
         t("unknown_input", user.lang),
-        reply_markup=main_menu(user.lang, creator.status if creator else None),
+        reply_markup=main_menu(user.lang, await profiles_repo.menu_status(session, user.id)),
     )
 
 

@@ -32,15 +32,33 @@ async def get_item(session: AsyncSession, item_id: int, creator_id: int) -> Port
     return res.scalar_one_or_none()
 
 
+async def list_profile_items(
+    session: AsyncSession, creator_id: int, profile_id: int
+) -> list[PortfolioItem]:
+    """Портфолио одного направления: его элементы плюс общие (добавленные до
+    разделения по направлениям — у них profile_id пустой)."""
+    res = await session.execute(
+        select(PortfolioItem)
+        .where(
+            PortfolioItem.creator_id == creator_id,
+            (PortfolioItem.profile_id == profile_id) | (PortfolioItem.profile_id.is_(None)),
+        )
+        .order_by(PortfolioItem.id)
+    )
+    return list(res.scalars().all())
+
+
 async def add_item(
     session: AsyncSession,
     creator_id: int,
     media_type: MediaType,
     file_id: str,
     caption: str | None,
+    profile_id: int | None = None,
 ) -> PortfolioItem:
     item = PortfolioItem(
         creator_id=creator_id,
+        profile_id=profile_id,
         media_type=media_type,
         file_id=file_id,
         caption=caption,

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.db.models import (
     Category,
     Creator,
+    CreatorProfile,
     CreatorStatus,
     ModerationStatus,
     User,
@@ -25,50 +26,58 @@ async def get_creator(session: AsyncSession, user_id: int) -> Creator | None:
 
 
 async def get_approved_creator(session: AsyncSession, user_id: int) -> Creator | None:
-    from bot.db.models import CreatorStatus
-
+    """Исполнитель, которому открыта панель: не заблокирован и имеет хотя бы один
+    одобренный профиль. Право на конкретное направление проверяет
+    profiles.approved_profile()."""
     res = await session.execute(
-        select(Creator).where(
+        select(Creator)
+        .join(CreatorProfile, CreatorProfile.creator_id == Creator.id)
+        .where(
             Creator.user_id == user_id,
             Creator.status == CreatorStatus.approved,
+            CreatorProfile.status == CreatorStatus.approved,
         )
+        .limit(1)
     )
-    return res.scalar_one_or_none()
+    return res.scalars().first()
 
 
-async def approved_beat_genres(session: AsyncSession, category_id: int) -> list[str]:
-    res = await session.execute(
-        select(Work.genre)
+def _visible_works(direction: str):
+    """Работы, которые видит клиент: одобрены и автор одобрен по этому направлению."""
+    return (
+        select(Work)
         .join(Creator, Creator.id == Work.creator_id)
+        .join(
+            CreatorProfile,
+            (CreatorProfile.creator_id == Creator.id) & (CreatorProfile.direction == direction),
+        )
         .where(
-            Work.category_id == category_id,
             Work.moderation_status == ModerationStatus.approved,
             Creator.status == CreatorStatus.approved,
-            Work.genre.is_not(None),
+            CreatorProfile.status == CreatorStatus.approved,
         )
-        .distinct()
     )
+
+
+async def approved_beat_genres(session: AsyncSession, category_id: int, direction: str) -> list[str]:
+    q = _visible_works(direction).with_only_columns(Work.genre).where(
+        Work.category_id == category_id, Work.genre.is_not(None)
+    ).distinct()
+    res = await session.execute(q)
     return sorted({g for g in res.scalars().all() if g})
 
 
 async def filter_beats(
     session: AsyncSession,
     category_id: int,
+    direction: str,
     genre: str | None = None,
     key: str | None = None,
     bpm_min: int | None = None,
     bpm_max: int | None = None,
 ) -> list[int]:
-    """Возвращает id одобренных битов под фильтр, новые сверху."""
-    q = (
-        select(Work.id)
-        .join(Creator, Creator.id == Work.creator_id)
-        .where(
-            Work.category_id == category_id,
-            Work.moderation_status == ModerationStatus.approved,
-            Creator.status == CreatorStatus.approved,
-        )
-    )
+    """Возвращает id одобренных работ категории под фильтр, новые сверху."""
+    q = _visible_works(direction).with_only_columns(Work.id).where(Work.category_id == category_id)
     if genre:
         q = q.where(Work.genre == genre)
     if key:

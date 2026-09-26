@@ -7,7 +7,8 @@ class Registration(StatesGroup):
 
 
 class CreatorApplication(StatesGroup):
-    service = State()
-    experience = State()
-    portfolio = State()
+    """Заявка на одно направление; код направления — в данных состояния."""
+
+    about = State()
+    links = State()
     portfolio_media = State()   # необязательный цикл добавления медиа в портфолио

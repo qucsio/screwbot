@@ -9,14 +9,17 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Creator, ModerationStatus, User
+from bot.db.models import Creator, CreatorProfile, ModerationStatus, User
+from bot.db.repositories import orders as orders_repo
 from bot.db.repositories import portfolio as portfolio_repo
+from bot.db.repositories import profiles as profiles_repo
 from bot.db.repositories import works as repo
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text
+from bot.services.moderation import direction_title
 from bot.services.money import fmt_money as _money
 from bot.services.money import parse_money
-from bot.services.text import EXPERIENCE_MAX, SOCIALS_MAX, esc
+from bot.services.text import EXPERIENCE_MAX, PORTFOLIO_LINKS_MAX, SOCIALS_MAX, esc
 from bot.services.ui import replace_card
 from bot.states.profile import ProfileEdit
 
@@ -27,35 +30,8 @@ def _status_text(status: ModerationStatus, lang) -> str:
     return t(f"status_{status.value}", lang)
 
 
-def _profile_keyboard(lang) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=t("btn_edit_socials", lang), callback_data="prof:socials"),
-                InlineKeyboardButton(text=t("btn_edit_desc", lang), callback_data="prof:desc"),
-            ],
-            [InlineKeyboardButton(text=t("btn_my_works", lang), callback_data="prof:works")],
-            [InlineKeyboardButton(text=t("addwork_choose", lang), callback_data="prof:addwork")],
-            [InlineKeyboardButton(text=t("btn_delete_profile", lang), callback_data="prof:delete")],
-        ]
-    )
-
-
-def _profile_text(creator: Creator, lang) -> str:
-    return t(
-        "profile_title", lang,
-        service=esc(creator.service),
-        socials=esc(creator.socials, limit=SOCIALS_MAX),
-        desc=esc(creator.experience, limit=EXPERIENCE_MAX),
-        balance=_money(creator.balance),
-    )
-
-
-async def _profile_full_text(session: AsyncSession, creator: Creator, lang) -> str:
-    works = await repo.list_creator_works(session, creator.id)
-    media = await portfolio_repo.count(session, creator.id)
-    counts = t("profile_counts", lang, works=len(works), media=media)
-    return f"{_profile_text(creator, lang)}\n\n{counts}"
+def _cstatus(profile: CreatorProfile, lang) -> str:
+    return t(f"cstatus_{profile.status.value}", lang)
 
 
 async def _get_creator(session: AsyncSession, user: User) -> Creator | None:
@@ -63,6 +39,38 @@ async def _get_creator(session: AsyncSession, user: User) -> Creator | None:
 
 
 # =========================================================================
+# КАБИНЕТ: человек и его направления
+# =========================================================================
+
+
+def _cabinet_keyboard(profiles: list[CreatorProfile], lang) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=f"{direction_title(p.direction, lang)} · {_cstatus(p, lang)}",
+            callback_data=f"prof:p:{p.id}",
+        )]
+        for p in profiles
+    ]
+    rows.append([InlineKeyboardButton(text=t("btn_add_direction", lang), callback_data="prof:adddir")])
+    rows.append([
+        InlineKeyboardButton(text=t("btn_edit_socials", lang), callback_data="prof:socials"),
+        InlineKeyboardButton(text=t("btn_my_works", lang), callback_data="prof:works"),
+    ])
+    rows.append([InlineKeyboardButton(text=t("addwork_choose", lang), callback_data="prof:addwork")])
+    rows.append([InlineKeyboardButton(text=t("btn_delete_profile", lang), callback_data="prof:delete")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _cabinet(session: AsyncSession, creator: Creator, lang) -> tuple[str, InlineKeyboardMarkup]:
+    profiles = await profiles_repo.list_profiles(session, creator.id)
+    works = await repo.list_creator_works(session, creator.id)
+    media = await portfolio_repo.count(session, creator.id)
+    text = t(
+        "profile_title", lang,
+        socials=esc(creator.socials, limit=SOCIALS_MAX), balance=_money(creator.balance),
+    )
+    text += "\n\n" + t("profile_counts", lang, works=len(works), media=media)
+    return text, _cabinet_keyboard(profiles, lang)
 
 
 async def open_profile(message: Message, session: AsyncSession, user: User):
@@ -70,8 +78,8 @@ async def open_profile(message: Message, session: AsyncSession, user: User):
     if creator is None:
         await message.answer(t("profile_only_creator", user.lang))
         return
-    text = await _profile_full_text(session, creator, user.lang)
-    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
+    text, kb = await _cabinet(session, creator, user.lang)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(Command("profile"))
@@ -87,8 +95,17 @@ async def profile_root(call: CallbackQuery, session: AsyncSession, user: User):
     if creator is None:
         await call.answer()
         return
-    text = await _profile_full_text(session, creator, user.lang)
-    await call.message.edit_text(text, reply_markup=_profile_keyboard(user.lang))
+    text, kb = await _cabinet(session, creator, user.lang)
+    await replace_card(call, text, kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "prof:adddir")
+async def profile_add_direction(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    """Ещё одно направление — та же заявка, что и «Стать исполнителем»."""
+    from bot.handlers.start import start_creator_application
+
+    await start_creator_application(call.message, state, session, user, call.from_user.username)
     await call.answer()
 
 
@@ -100,7 +117,88 @@ async def profile_addwork(call: CallbackQuery, session: AsyncSession, user: User
     await call.answer()
 
 
-# --- Правка соцсетей / описания ------------------------------------------
+# --- Карточка направления -------------------------------------------------
+
+
+def _profile_keyboard(profile: CreatorProfile, lang) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=t("btn_edit_desc", lang), callback_data=f"prof:pf:about:{profile.id}"),
+            InlineKeyboardButton(text=t("btn_edit_links", lang), callback_data=f"prof:pf:links:{profile.id}"),
+        ],
+        [InlineKeyboardButton(text=t("btn_view_portfolio", lang), callback_data=f"port:open:{profile.id}")],
+        [InlineKeyboardButton(text=t("back", lang), callback_data="prof:root")],
+    ])
+
+
+def _profile_text(profile: CreatorProfile, lang) -> str:
+    return t(
+        "profile_direction_card", lang,
+        direction=direction_title(profile.direction, lang),
+        status=_cstatus(profile, lang),
+        about=esc(profile.about, limit=EXPERIENCE_MAX),
+        links=esc(profile.links, limit=PORTFOLIO_LINKS_MAX),
+    )
+
+
+async def _own_profile(session: AsyncSession, user: User, profile_id: int) -> CreatorProfile | None:
+    creator = await repo.get_creator(session, user.id)
+    return await profiles_repo.get_own_profile(session, profile_id, creator.id) if creator else None
+
+
+@router.callback_query(F.data.startswith("prof:p:"))
+async def open_direction_profile(call: CallbackQuery, session: AsyncSession, user: User):
+    profile = await _own_profile(session, user, int(call.data.split(":")[2]))
+    if profile is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    await replace_card(call, _profile_text(profile, user.lang), _profile_keyboard(profile, user.lang))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("prof:pf:"))
+async def edit_profile_field(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    _, _, field, profile_id_raw = call.data.split(":")
+    profile = await _own_profile(session, user, int(profile_id_raw))
+    if profile is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    await state.set_state(ProfileEdit.about if field == "about" else ProfileEdit.links)
+    await state.update_data(profile_id=profile.id)
+    await call.message.answer(
+        t("profile_ask_desc" if field == "about" else "profile_ask_links", user.lang),
+        reply_markup=cancel_kb(user.lang),
+    )
+    await call.answer()
+
+
+async def _save_profile_field(message: Message, state: FSMContext, session: AsyncSession,
+                              user: User, field: str, max_len: int) -> None:
+    value = await read_text(message, user.lang, max_len)
+    if value is None:
+        return
+    data = await state.get_data()
+    await state.clear()
+    profile = await _own_profile(session, user, data["profile_id"])
+    if profile is None:
+        return
+    setattr(profile, field, value)
+    await session.commit()
+    await message.answer(t("profile_saved", user.lang))
+    await message.answer(_profile_text(profile, user.lang), reply_markup=_profile_keyboard(profile, user.lang))
+
+
+@router.message(ProfileEdit.about)
+async def save_about(message: Message, state: FSMContext, session: AsyncSession, user: User):
+    await _save_profile_field(message, state, session, user, "about", EXPERIENCE_MAX)
+
+
+@router.message(ProfileEdit.links)
+async def save_links(message: Message, state: FSMContext, session: AsyncSession, user: User):
+    await _save_profile_field(message, state, session, user, "links", PORTFOLIO_LINKS_MAX)
+
+
+# --- Соцсети: общие для человека, а не для направления --------------------
 
 
 @router.callback_query(F.data == "prof:socials")
@@ -110,41 +208,20 @@ async def edit_socials(call: CallbackQuery, state: FSMContext, user: User):
     await call.answer()
 
 
-@router.callback_query(F.data == "prof:desc")
-async def edit_desc(call: CallbackQuery, state: FSMContext, user: User):
-    await state.set_state(ProfileEdit.description)
-    await call.message.answer(t("profile_ask_desc", user.lang), reply_markup=cancel_kb(user.lang))
-    await call.answer()
-
-
 @router.message(ProfileEdit.socials)
 async def save_socials(message: Message, state: FSMContext, session: AsyncSession, user: User):
     value = await read_text(message, user.lang, SOCIALS_MAX)
     if value is None:
         return
     creator = await _get_creator(session, user)
-    if creator:
-        creator.socials = value
-        await session.commit()
-    await state.clear()
-    await message.answer(t("profile_saved", user.lang))
-    text = await _profile_full_text(session, creator, user.lang)
-    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
-
-
-@router.message(ProfileEdit.description)
-async def save_desc(message: Message, state: FSMContext, session: AsyncSession, user: User):
-    value = await read_text(message, user.lang, EXPERIENCE_MAX)
-    if value is None:
+    if creator is None:
         return
-    creator = await _get_creator(session, user)
-    if creator:
-        creator.experience = value
-        await session.commit()
+    creator.socials = value
+    await session.commit()
     await state.clear()
     await message.answer(t("profile_saved", user.lang))
-    text = await _profile_full_text(session, creator, user.lang)
-    await message.answer(text, reply_markup=_profile_keyboard(user.lang))
+    text, kb = await _cabinet(session, creator, user.lang)
+    await message.answer(text, reply_markup=kb)
 
 
 # --- Мои работы (CRUD) ---------------------------------------------------
@@ -190,18 +267,22 @@ def _work_text(work, lang, ctype: str = "beat") -> str:
     )
 
 
+async def _show_works(call: CallbackQuery, session: AsyncSession, creator: Creator, user: User):
+    works = await repo.list_creator_works(session, creator.id)
+    if works:
+        await replace_card(call, t("works_list_title", user.lang), _works_keyboard(works, user.lang))
+        return
+    text, kb = await _cabinet(session, creator, user.lang)
+    await replace_card(call, t("works_empty", user.lang) + "\n\n" + text, kb)
+
+
 @router.callback_query(F.data == "prof:works")
 async def my_works(call: CallbackQuery, session: AsyncSession, user: User):
     creator = await _get_creator(session, user)
     if creator is None:
         await call.answer()
         return
-    works = await repo.list_creator_works(session, creator.id)
-    if not works:
-        await replace_card(call, t("works_empty", user.lang), _profile_keyboard(user.lang))
-        await call.answer()
-        return
-    await replace_card(call, t("works_list_title", user.lang), _works_keyboard(works, user.lang))
+    await _show_works(call, session, creator, user)
     await call.answer()
 
 
@@ -252,12 +333,8 @@ async def delete_work(call: CallbackQuery, session: AsyncSession, user: User):
         return
     await session.delete(work)
     await session.commit()
-    works = await repo.list_creator_works(session, creator.id)
     await call.answer(t("work_deleted", user.lang), show_alert=True)
-    if works:
-        await replace_card(call, t("works_list_title", user.lang), _works_keyboard(works, user.lang))
-    else:
-        await replace_card(call, t("works_empty", user.lang), _profile_keyboard(user.lang))
+    await _show_works(call, session, creator, user)
 
 
 @router.callback_query(F.data.startswith("prof:price:"))
@@ -322,11 +399,28 @@ def _delete_confirm_kb(lang) -> InlineKeyboardMarkup:
 
 @router.callback_query(F.data == "prof:delete")
 async def profile_delete_ask(call: CallbackQuery, session: AsyncSession, user: User):
+    """Перед удалением показываем, что именно потеряется, и не даём бросить заказы."""
     creator = await _get_creator(session, user)
     if creator is None:
         await call.answer()
         return
-    await call.message.answer(t("profile_delete_confirm", user.lang), reply_markup=_delete_confirm_kb(user.lang))
+    active = await orders_repo.active_ids_for_creator(session, creator.id)
+    if active:
+        await call.message.answer(
+            t("profile_delete_active_orders", user.lang, orders=", ".join(f"#{i}" for i in active))
+        )
+        await call.answer()
+        return
+    profiles = await profiles_repo.list_profiles(session, creator.id)
+    works = await repo.list_creator_works(session, creator.id)
+    media = await portfolio_repo.count(session, creator.id)
+    text = t(
+        "profile_delete_confirm", user.lang,
+        directions=len(profiles), works=len(works), media=media,
+    )
+    if creator.balance and creator.balance > 0:
+        text += "\n\n" + t("profile_delete_balance", user.lang, balance=_money(creator.balance))
+    await call.message.answer(text, reply_markup=_delete_confirm_kb(user.lang))
     await call.answer()
 
 
@@ -341,7 +435,7 @@ async def profile_delete_do(call: CallbackQuery, session: AsyncSession, user: Us
     if creator is None:
         await call.answer()
         return
-    # отвязываем от заказов (FK без ON DELETE); работы и портфолио уйдут каскадом
+    # отвязываем от заказов (FK без ON DELETE); профили, работы и портфолио уйдут каскадом
     await session.execute(update(Order).where(Order.creator_id == creator.id).values(creator_id=None))
     await session.delete(creator)
     await session.commit()

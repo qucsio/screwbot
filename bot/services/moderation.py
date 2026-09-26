@@ -6,8 +6,9 @@
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup
 
-from bot.db.models import Creator, Lang, User, Work
-from bot.keyboards.common import moderation_keyboard, work_moderation_keyboard
+from bot.categories import direction_by_code
+from bot.db.models import CreatorProfile, Lang, User, Work
+from bot.keyboards.common import profile_moderation_keyboard, work_moderation_keyboard
 from bot.locales import t
 from bot.services.money import fmt_money
 from bot.services.notify import send_to_moderation, send_work_to_moderation
@@ -15,16 +16,21 @@ from bot.services.order_view import contact
 from bot.services.text import EXPERIENCE_MAX, PORTFOLIO_LINKS_MAX, esc
 
 
-def creator_card(user: User, creator: Creator) -> tuple[str, InlineKeyboardMarkup]:
+def direction_title(code: str, lang: Lang = Lang.ru) -> str:
+    direction = direction_by_code(code)
+    return direction.title(lang) if direction else code
+
+
+def profile_card(user: User, profile: CreatorProfile) -> tuple[str, InlineKeyboardMarkup]:
     text = t(
-        "mod_new_creator", Lang.ru,
+        "mod_new_profile", Lang.ru,
+        direction=direction_title(profile.direction),
         contact=contact(user),
         nickname=esc(user.nickname),
-        service=esc(creator.service),
-        experience=esc(creator.experience, limit=EXPERIENCE_MAX),
-        portfolio=esc(creator.portfolio, limit=PORTFOLIO_LINKS_MAX),
+        about=esc(profile.about, limit=EXPERIENCE_MAX),
+        links=esc(profile.links, limit=PORTFOLIO_LINKS_MAX),
     )
-    return text, moderation_keyboard(Lang.ru, creator.id)
+    return text, profile_moderation_keyboard(Lang.ru, profile.id, profile.creator_id)
 
 
 def work_card(work: Work, author: User, ctype: str) -> tuple[str, InlineKeyboardMarkup]:
@@ -46,8 +52,8 @@ def work_card(work: Work, author: User, ctype: str) -> tuple[str, InlineKeyboard
     return text, kb
 
 
-async def send_creator_card(bot: Bot, user: User, creator: Creator) -> None:
-    text, kb = creator_card(user, creator)
+async def send_profile_card(bot: Bot, user: User, profile: CreatorProfile) -> None:
+    text, kb = profile_card(user, profile)
     await send_to_moderation(bot, text, kb)
 
 

@@ -35,6 +35,26 @@ async def claim_order(session: AsyncSession, order_id: int, creator_id: int) -> 
     return result.rowcount == 1
 
 
+# Заказы «в работе»: пока они есть, исполнителю нельзя удалить профиль —
+# иначе клиент остаётся с заказом без исполнителя и без предупреждения.
+ACTIVE_STATUSES = [
+    OrderStatus.taken,
+    OrderStatus.await_prepay,
+    OrderStatus.in_progress,
+    OrderStatus.demo_review,
+    OrderStatus.await_final,
+]
+
+
+async def active_ids_for_creator(session: AsyncSession, creator_id: int) -> list[int]:
+    res = await session.execute(
+        select(Order.id)
+        .where(Order.creator_id == creator_id, Order.status.in_(ACTIVE_STATUSES))
+        .order_by(Order.id)
+    )
+    return list(res.scalars().all())
+
+
 async def complete_with_payout(session: AsyncSession, order_id: int, amount: Decimal) -> bool:
     """Закрывает заказ и начисляет исполнителю amount — строго один раз.
 

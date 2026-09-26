@@ -9,7 +9,9 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Creator, CreatorStatus, Lang, Role, User
+from bot.categories import DIRECTIONS, direction_by_code
+from bot.db.models import Creator, CreatorProfile, CreatorStatus, Lang, Role, User
+from bot.db.repositories import profiles as profiles_repo
 from bot.db.repositories.works import get_creator
 from bot.keyboards.common import (
     lang_keyboard,
@@ -19,24 +21,14 @@ from bot.keyboards.common import (
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text, step
 from bot.services.media import detect_media
-from bot.services.moderation import send_creator_card
-from bot.services.text import (
-    EXPERIENCE_MAX,
-    NICKNAME_MAX,
-    PORTFOLIO_LINKS_MAX,
-    SERVICE_MAX,
-    esc,
-)
+from bot.services.moderation import send_profile_card
+from bot.services.text import EXPERIENCE_MAX, NICKNAME_MAX, PORTFOLIO_LINKS_MAX, esc
 from bot.states.registration import CreatorApplication, Registration
 
 router = Router()
 
-_APP_STEPS = 3
-
-
 async def _creator_status(session: AsyncSession, user: User) -> CreatorStatus | None:
-    creator = await get_creator(session, user.id)
-    return creator.status if creator else None
+    return await profiles_repo.menu_status(session, user.id)
 
 
 async def _menu(message: Message, session: AsyncSession, user: User) -> None:
@@ -115,51 +107,72 @@ async def change_lang(call: CallbackQuery, session: AsyncSession, user: User | N
     await call.answer()
 
 
-# --- Заявка исполнителя (из меню) ----------------------------------------
+# --- Заявка исполнителя: по одному профилю на направление -----------------
+
+_APP_STEPS = 2
+
+
+def _directions_kb(free: list, lang: Lang) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=d.title(lang), callback_data=f"appdir:{d.code}")] for d in free
+    ])
 
 
 async def start_creator_application(
-    message: Message, state: FSMContext, session: AsyncSession, user: User
+    message: Message, state: FSMContext, session: AsyncSession, user: User, username: str | None
 ):
-    """Точка входа по кнопке «Стать исполнителем»."""
+    """Точка входа по кнопке «Стать исполнителем»: выбор свободного направления.
+
+    username передаётся отдельно: при входе из кабинета message отправлен ботом,
+    и message.from_user — это сам бот, а не человек.
+    """
     creator = await get_creator(session, user.id)
-    if creator is not None:
-        if creator.status == CreatorStatus.approved:
-            await message.answer(t("creator_already_approved", user.lang))
-        elif creator.status == CreatorStatus.blocked:
-            # раньше тут отвечали «заявка на рассмотрении» — неправда для отклонённых
-            await message.answer(t("creator_blocked_info", user.lang),
-                                 reply_markup=main_menu(user.lang, creator.status))
-        else:
-            await message.answer(t("application_pending_info", user.lang))
+    if creator is not None and creator.status == CreatorStatus.blocked:
+        # раньше тут отвечали «заявка на рассмотрении» — неправда для отклонённых
+        await message.answer(t("creator_blocked_info", user.lang),
+                             reply_markup=main_menu(user.lang, creator.status))
         return
-    if not message.from_user.username:
+    if not username:
         await message.answer(t("creator_need_username", user.lang))
         return
-    await state.clear()
-    await state.set_state(CreatorApplication.service)
-    await message.answer(t("become_creator_intro", user.lang))
-    await message.answer(step(1, _APP_STEPS, "creator_ask_service", user.lang), reply_markup=cancel_kb(user.lang))
-
-
-@router.message(CreatorApplication.service)
-async def app_service(message: Message, state: FSMContext, user: User):
-    value = await read_text(message, user.lang, SERVICE_MAX)
-    if value is None:
+    taken = {p.direction for p in await profiles_repo.list_profiles(session, creator.id)} if creator else set()
+    free = [d for d in DIRECTIONS if d.code not in taken]
+    if not free:
+        await message.answer(t("app_all_directions", user.lang))
         return
-    await state.update_data(service=value)
-    await state.set_state(CreatorApplication.experience)
-    await message.answer(step(2, _APP_STEPS, "creator_ask_experience", user.lang), reply_markup=cancel_kb(user.lang))
+    await state.clear()
+    await message.answer(t("app_choose_direction", user.lang), reply_markup=_directions_kb(free, user.lang))
 
 
-@router.message(CreatorApplication.experience)
-async def app_experience(message: Message, state: FSMContext, user: User):
+@router.callback_query(F.data.startswith("appdir:"))
+async def app_pick_direction(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
+    code = call.data.split(":", 1)[1]
+    direction = direction_by_code(code)
+    if direction is None:
+        await call.answer(t("button_outdated", user.lang))
+        return
+    creator = await get_creator(session, user.id)
+    if creator and await profiles_repo.get_profile_by_direction(session, creator.id, code):
+        await call.answer(t("app_direction_taken", user.lang), show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(CreatorApplication.about)
+    await state.update_data(direction=code)
+    await call.message.answer(
+        step(1, _APP_STEPS, "app_ask_about", user.lang, direction=direction.title(user.lang)),
+        reply_markup=cancel_kb(user.lang),
+    )
+    await call.answer()
+
+
+@router.message(CreatorApplication.about)
+async def app_about(message: Message, state: FSMContext, user: User):
     value = await read_text(message, user.lang, EXPERIENCE_MAX)
     if value is None:
         return
-    await state.update_data(experience=value)
-    await state.set_state(CreatorApplication.portfolio)
-    await message.answer(step(3, _APP_STEPS, "creator_ask_portfolio", user.lang), reply_markup=cancel_kb(user.lang))
+    await state.update_data(about=value)
+    await state.set_state(CreatorApplication.links)
+    await message.answer(step(2, _APP_STEPS, "app_ask_links", user.lang), reply_markup=cancel_kb(user.lang))
 
 
 def _app_media_kb(lang: Lang) -> InlineKeyboardMarkup:
@@ -170,31 +183,36 @@ def _app_media_kb(lang: Lang) -> InlineKeyboardMarkup:
     )
 
 
-@router.message(CreatorApplication.portfolio)
-async def app_portfolio(
+@router.message(CreatorApplication.links)
+async def app_links(
     message: Message, state: FSMContext, session: AsyncSession, user: User, bot: Bot
 ):
     value = await read_text(message, user.lang, PORTFOLIO_LINKS_MAX)
     if value is None:
         return
     data = await state.get_data()
-    creator = Creator(
-        user_id=user.id,
+    creator = await get_creator(session, user.id)
+    if creator is None:
+        # человек-исполнитель заводится один раз; на модерацию идёт профиль направления
+        creator = Creator(user_id=user.id, status=CreatorStatus.approved)
+        session.add(creator)
+        await session.flush()
+    profile = CreatorProfile(
+        creator_id=creator.id,
+        direction=data["direction"],
         status=CreatorStatus.pending,
-        service=data.get("service"),
-        experience=data.get("experience"),
-        portfolio=value,
+        about=data.get("about"),
+        links=value,
     )
-    session.add(creator)
+    session.add(profile)
     await session.commit()
 
-    # Заявка уже валидна — сразу шлём карточку админу (медиа он видит по кнопке «live»).
     await message.answer(t("creator_application_sent", user.lang))
-    await send_creator_card(bot, user, creator)
+    await send_profile_card(bot, user, profile)
 
-    # Необязательный цикл: добавить медиа в портфолио прямо сейчас.
+    # Необязательный цикл: добавить медиа в портфолио этого направления прямо сейчас.
     await state.set_state(CreatorApplication.portfolio_media)
-    await state.update_data(creator_id=creator.id)
+    await state.update_data(creator_id=creator.id, profile_id=profile.id)
     await message.answer(t("app_media_prompt", user.lang), reply_markup=_app_media_kb(user.lang))
 
 
@@ -208,7 +226,7 @@ async def app_portfolio_media(message: Message, state: FSMContext, session: Asyn
         return
     data = await state.get_data()
     media_type, file_id = found
-    await pf_repo.add_item(session, data["creator_id"], media_type, file_id, None)
+    await pf_repo.add_item(session, data["creator_id"], media_type, file_id, None, data.get("profile_id"))
     await message.answer(t("app_media_added", user.lang), reply_markup=_app_media_kb(user.lang))
 
 

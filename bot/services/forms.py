@@ -93,13 +93,12 @@ async def read_text(
 
 async def _menu_after_cancel(session: AsyncSession, user: User | None) -> ReplyKeyboardMarkup | None:
     from bot.db.models import CreatorStatus
-    from bot.db.repositories.works import get_creator
+    from bot.db.repositories import profiles as profiles_repo
     from bot.keyboards.common import creator_panel, main_menu
 
     if not (user and user.role):
         return None
-    creator = await get_creator(session, user.id)
-    status = creator.status if creator else None
+    status = await profiles_repo.menu_status(session, user.id)
     # Одобренный исполнитель возвращается в свою панель, остальные — в главное меню.
     return creator_panel(user.lang) if status == CreatorStatus.approved else main_menu(user.lang, status)
 

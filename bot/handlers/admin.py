@@ -12,14 +12,25 @@ from aiogram.types import (
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Creator, CreatorStatus, Lang, ModerationStatus, Order, User, Work
+from bot.categories import DIRECTIONS, direction_by_code
+from bot.db.models import (
+    Creator,
+    CreatorProfile,
+    CreatorStatus,
+    Lang,
+    ModerationStatus,
+    Order,
+    User,
+    Work,
+)
+from bot.db.repositories import profiles as profiles_repo
 from bot.db.repositories import works as repo
 from bot.filters import IsAdmin
 from bot.handlers.beats import parse_bpm
 from bot.locales import t
 from bot.services.forms import cancel_kb, read_text
 from bot.services.media import detect_audio
-from bot.services.moderation import creator_card, send_work_card
+from bot.services.moderation import direction_title, profile_card, send_work_card
 from bot.services.money import fmt_money as _money
 from bot.services.money import parse_money
 from bot.services.order_view import contact as _contact
@@ -74,33 +85,33 @@ async def adm_root(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "adm:queue")
 async def adm_queue(call: CallbackQuery, session: AsyncSession):
     """Всё, что ждёт решения: раньше пропущенную карточку в личке было не найти."""
-    creators = await repo.list_pending_creators(session)
+    profiles = await profiles_repo.list_pending_profiles(session)
     works = await repo.list_pending_works(session)
     rows = [
         [InlineKeyboardButton(
-            text=f"👤 {u.nickname or u.username or c.id} · {c.service or '—'}"[:60],
-            callback_data=f"adm:qc:{c.id}",
+            text=f"👤 {u.nickname or u.username or c.id} · {direction_title(p.direction)}"[:60],
+            callback_data=f"adm:qp:{p.id}",
         )]
-        for c, u in creators
+        for p, c, u in profiles
     ] + [
         [InlineKeyboardButton(text=f"🎵 {w.title} · #{w.id}"[:60], callback_data=f"adm:qw:{w.id}")]
         for w in works
     ]
     rows.append([InlineKeyboardButton(text=t("back", L), callback_data="adm:root")])
-    text = t("adm_queue_title", L, creators=len(creators), works=len(works)) if (creators or works) \
+    text = t("adm_queue_title", L, creators=len(profiles), works=len(works)) if (profiles or works) \
         else t("adm_queue_empty", L)
     await call.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
     await call.answer()
 
 
-@router.callback_query(F.data.startswith("adm:qc:"))
-async def adm_queue_creator(call: CallbackQuery, session: AsyncSession):
-    pair = await repo.get_creator_full(session, int(call.data.split(":")[2]))
-    if pair is None or pair[0].status != CreatorStatus.pending:
+@router.callback_query(F.data.startswith("adm:qp:"))
+async def adm_queue_profile(call: CallbackQuery, session: AsyncSession):
+    bundle = await profiles_repo.profile_with_owner(session, int(call.data.split(":")[2]))
+    if bundle is None or bundle[0].status != CreatorStatus.pending:
         await call.answer(t("adm_queue_done", L), show_alert=True)
         return
-    creator, user = pair
-    text, kb = creator_card(user, creator)
+    profile, _creator, user = bundle
+    text, kb = profile_card(user, profile)
     await call.message.answer(text, reply_markup=kb)
     await call.answer()
 
@@ -191,13 +202,15 @@ def _creator_keyboard(creator: Creator) -> InlineKeyboardMarkup:
     )
 
 
-def _creator_card_text(creator: Creator, user: User) -> str:
-    return t(
+def _creator_card_text(creator: Creator, user: User, profiles: list | None = None) -> str:
+    text = t(
         "adm_creator_card", L,
         cid=creator.id, contact=_contact(user), nickname=esc(user.nickname),
-        service=esc(creator.service), status=_cstatus(creator.status),
-        balance=_money(creator.balance),
+        status=_cstatus(creator.status), balance=_money(creator.balance),
     )
+    lines = [f"• {direction_title(p.direction)} — {_cstatus(p.status)}" for p in (profiles or [])]
+    tail = t("adm_creator_directions", L) + "\n" + "\n".join(lines) if lines else t("adm_creator_no_directions", L)
+    return f"{text}\n\n{tail}"
 
 
 async def _show_creator_card(call: CallbackQuery, session: AsyncSession, creator_id: int):
@@ -206,7 +219,10 @@ async def _show_creator_card(call: CallbackQuery, session: AsyncSession, creator
         await call.answer()
         return
     creator, user = pair
-    await call.message.edit_text(_creator_card_text(creator, user), reply_markup=_creator_keyboard(creator))
+    profiles = await profiles_repo.list_profiles(session, creator.id)
+    await call.message.edit_text(
+        _creator_card_text(creator, user, profiles), reply_markup=_creator_keyboard(creator)
+    )
 
 
 @router.callback_query(F.data.startswith("adm:creator:"))
@@ -224,7 +240,10 @@ async def adm_open_author(call: CallbackQuery, session: AsyncSession):
         await call.answer("not found", show_alert=True)
         return
     creator, user = pair
-    await call.message.answer(_creator_card_text(creator, user), reply_markup=_creator_keyboard(creator))
+    profiles = await profiles_repo.list_profiles(session, creator.id)
+    await call.message.answer(
+        _creator_card_text(creator, user, profiles), reply_markup=_creator_keyboard(creator)
+    )
     await call.answer()
 
 
@@ -330,15 +349,38 @@ async def adm_add_creator_save(message: Message, state: FSMContext, session: Asy
     if user is None:
         await message.answer(t("adm_user_not_found", L))
         return
-    res = await session.execute(select(Creator).where(Creator.user_id == user.id))
-    creator = res.scalar_one_or_none()
+    # направление обязательно: без профиля исполнитель ничего не сможет взять
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=d.title(L), callback_data=f"adm:adddir:{user.id}:{d.code}")]
+        for d in DIRECTIONS
+    ])
+    await message.answer(t("adm_add_creator_direction", L, contact=_contact(user)), reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("adm:adddir:"))
+async def adm_add_creator_direction(call: CallbackQuery, session: AsyncSession):
+    _, _, user_id_raw, direction = call.data.split(":")
+    user = await session.get(User, int(user_id_raw))
+    if user is None or direction_by_code(direction) is None:
+        await call.answer(t("button_outdated", L))
+        return
+    creator = (await session.execute(select(Creator).where(Creator.user_id == user.id))).scalar_one_or_none()
     if creator is None:
-        creator = Creator(user_id=user.id, status=CreatorStatus.approved, service="—")
+        creator = Creator(user_id=user.id, status=CreatorStatus.approved)
         session.add(creator)
+        await session.flush()
     else:
         creator.status = CreatorStatus.approved
+    profile = await profiles_repo.get_profile_by_direction(session, creator.id, direction)
+    if profile is None:
+        session.add(CreatorProfile(creator_id=creator.id, direction=direction, status=CreatorStatus.approved))
+    else:
+        profile.status = CreatorStatus.approved
     await session.commit()
-    await message.answer(t("adm_creator_added", L, contact=_contact(user)))
+    await call.message.edit_text(
+        t("adm_creator_added", L, contact=_contact(user), direction=direction_title(direction))
+    )
+    await call.answer()
 
 
 # --- Правка профиля исполнителя админом ----------------------------------

@@ -147,17 +147,19 @@ def work_card_keyboard(
     )
 
 
-def moderation_keyboard(lang: Lang, creator_id: int) -> InlineKeyboardMarkup:
+def profile_moderation_keyboard(lang: Lang, profile_id: int, creator_id: int) -> InlineKeyboardMarkup:
+    """Модерация профиля по направлению: у человека их может быть несколько."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=t("mod_approve", lang), callback_data=f"modcreator:approve:{creator_id}"
+                    text=t("mod_approve", lang), callback_data=f"modprofile:approve:{profile_id}"
                 ),
                 InlineKeyboardButton(
-                    text=t("mod_reject", lang), callback_data=f"modcreator:reject:{creator_id}"
+                    text=t("mod_reject", lang), callback_data=f"modprofile:reject:{profile_id}"
                 ),
             ],
-            [InlineKeyboardButton(text=t("btn_view_portfolio", lang), callback_data=f"pfopen:{creator_id}")],
+            [InlineKeyboardButton(text=t("btn_view_portfolio", lang), callback_data=f"pfprof:{profile_id}")],
+            [InlineKeyboardButton(text=t("mod_author_profile", lang), callback_data=f"modauthor:{creator_id}")],
         ]
     )

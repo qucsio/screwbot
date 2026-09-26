@@ -8,8 +8,9 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, InputMediaVideo, Messa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot import app_config
-from bot.categories import by_code
+from bot.categories import by_code, direction_by_code, direction_of
 from bot.db.models import Creator, Lang, ModerationStatus, User, Work
+from bot.db.repositories import profiles as profiles_repo
 from bot.db.repositories import works as repo
 from bot.filters import IsAdmin
 from bot.keyboards.common import (
@@ -52,6 +53,16 @@ def _contact(user: User) -> str:
     return f"@{user.username}" if user.username else f"id{user.tg_id}"
 
 
+async def require_direction(session: AsyncSession, user: User, code: str) -> bool:
+    """Право работать в направлении категории — одобренный профиль этого направления."""
+    return await profiles_repo.approved_profile(session, user.id, direction_of(code)) is not None
+
+
+def direction_denied(lang: Lang, code: str) -> str:
+    cdef = direction_by_code(direction_of(code))
+    return t("need_direction_profile", lang, direction=cdef.title(lang) if cdef else "—")
+
+
 def parse_bpm(text: str | None) -> int | None:
     raw = (text or "").strip()
     if not raw.isdigit():
@@ -71,9 +82,8 @@ async def addbeat_start(
 ):
     if user is None:
         return
-    creator = await repo.get_approved_creator(session, user.id)
-    if creator is None:
-        await message.answer(t("addbeat_only_creator", user.lang))
+    if not await require_direction(session, user, READY_BEATS):
+        await message.answer(direction_denied(user.lang, READY_BEATS))
         return
     await state.clear()
     await state.set_state(AddBeat.title)
@@ -239,9 +249,8 @@ async def add_work_start(message: Message, session: AsyncSession, user: User | N
 
 @router.callback_query(F.data == "addwork:beat")
 async def add_work_beat(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
-    creator = await repo.get_approved_creator(session, user.id)
-    if creator is None:
-        await call.answer(t("addwork_only_creator", user.lang), show_alert=True)
+    if not await require_direction(session, user, READY_BEATS):
+        await call.answer(direction_denied(user.lang, READY_BEATS), show_alert=True)
         return
     await state.clear()
     await state.set_state(AddBeat.title)
@@ -251,9 +260,8 @@ async def add_work_beat(call: CallbackQuery, state: FSMContext, session: AsyncSe
 
 @router.callback_query(F.data == "addwork:visual")
 async def add_work_visual(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
-    creator = await repo.get_approved_creator(session, user.id)
-    if creator is None:
-        await call.answer(t("addwork_only_creator", user.lang), show_alert=True)
+    if not await require_direction(session, user, READY_VISUAL):
+        await call.answer(direction_denied(user.lang, READY_VISUAL), show_alert=True)
         return
     await state.clear()
     await state.set_state(AddVisual.title)
@@ -336,9 +344,8 @@ async def addvisual_price_buy(
 
 @router.callback_query(F.data == "addwork:video")
 async def add_work_video(call: CallbackQuery, state: FSMContext, session: AsyncSession, user: User):
-    creator = await repo.get_approved_creator(session, user.id)
-    if creator is None:
-        await call.answer(t("addwork_only_creator", user.lang), show_alert=True)
+    if not await require_direction(session, user, READY_VIDEO):
+        await call.answer(direction_denied(user.lang, READY_VIDEO), show_alert=True)
         return
     await state.clear()
     await state.set_state(AddVideo.title)
@@ -469,13 +476,14 @@ async def open_catalog(
     if category is None:
         await message.answer(t("catalog_empty", user.lang))
         return
-    ids = await repo.filter_beats(session, category.id)
+    direction = direction_of(code)
+    ids = await repo.filter_beats(session, category.id, direction)
     if not ids:
         await message.answer(t("catalog_empty", user.lang))
         return
     ctype = (by_code(code).catalog_type if by_code(code) else "beat") or "beat"
     await state.clear()
-    await state.update_data(category_id=category.id, ctype=ctype)
+    await state.update_data(category_id=category.id, ctype=ctype, direction=direction)
     await message.answer(t("filter_intro", user.lang), reply_markup=filter_intro_keyboard(user.lang))
 
 
@@ -486,7 +494,7 @@ async def filter_all(call: CallbackQuery, state: FSMContext, session: AsyncSessi
         # кнопка из старого сообщения: каталог с тех пор закрыт (раньше тут падало)
         await call.answer(t("button_outdated", user.lang))
         return
-    ids = await repo.filter_beats(session, data["category_id"])
+    ids = await repo.filter_beats(session, data["category_id"], data.get("direction", ""))
     if not ids:
         await call.answer(t("catalog_empty", user.lang), show_alert=True)
         return
@@ -500,7 +508,7 @@ async def filter_setup(call: CallbackQuery, state: FSMContext, session: AsyncSes
     if "category_id" not in data:
         await call.answer(t("button_outdated", user.lang))
         return
-    genres = await repo.approved_beat_genres(session, data["category_id"])
+    genres = await repo.approved_beat_genres(session, data["category_id"], data.get("direction", ""))
     single_field = data.get("ctype") in _SINGLE_FIELD_TYPES
     await state.set_state(BeatFilter.genre)
     # в кнопках — индексы жанров (лимит callback_data 64 байта), сами жанры — тут
@@ -594,7 +602,7 @@ async def _run_filter(target: Message, state: FSMContext, session: AsyncSession,
                       bpm_min: int | None, bpm_max: int | None) -> None:
     data = await state.get_data()
     ids = await repo.filter_beats(
-        session, data["category_id"],
+        session, data["category_id"], data.get("direction", ""),
         genre=data.get("f_genre"), key=data.get("f_key"),
         bpm_min=bpm_min, bpm_max=bpm_max,
     )

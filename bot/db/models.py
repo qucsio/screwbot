@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -36,6 +37,8 @@ class Role(str, enum.Enum):
 
 
 class CreatorStatus(str, enum.Enum):
+    """Статус профиля по направлению; у самого исполнителя — approved или blocked."""
+
     pending = "pending"      # заявка на модерации
     approved = "approved"
     blocked = "blocked"
@@ -108,6 +111,32 @@ class Creator(Base):
     user: Mapped[User] = relationship(back_populates="creator")
 
 
+class CreatorProfile(Base):
+    """Профиль исполнителя по одному направлению: своя модерация и своё портфолио.
+
+    Человек (creators) один: на нём баланс, отзывы и общая блокировка. Направлений
+    у него может быть несколько, и каждое одобряется отдельно — по профилю клиент
+    выбирает исполнителя, а право взять заказ даёт профиль нужного направления.
+    """
+
+    __tablename__ = "creator_profiles"
+    __table_args__ = (UniqueConstraint("creator_id", "direction"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    creator_id: Mapped[int] = mapped_column(
+        ForeignKey("creators.id", ondelete="CASCADE"), index=True
+    )
+    direction: Mapped[str] = mapped_column(String(16))   # код из bot/categories.py
+    status: Mapped[CreatorStatus] = mapped_column(
+        SAEnum(CreatorStatus), default=CreatorStatus.pending
+    )
+    about: Mapped[str | None] = mapped_column(Text)      # опыт, что делает
+    links: Mapped[str | None] = mapped_column(Text)      # ссылки на работы
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class PortfolioItem(Base):
     """Один медиа-элемент портфолио исполнителя (фото/видео/аудио/документ)."""
 
@@ -116,6 +145,10 @@ class PortfolioItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     creator_id: Mapped[int] = mapped_column(
         ForeignKey("creators.id", ondelete="CASCADE"), index=True
+    )
+    # NULL — элемент добавлен до разделения по направлениям: показываем во всех профилях
+    profile_id: Mapped[int | None] = mapped_column(
+        ForeignKey("creator_profiles.id", ondelete="CASCADE"), index=True
     )
     media_type: Mapped[MediaType] = mapped_column(SAEnum(MediaType))
     file_id: Mapped[str] = mapped_column(String(256))
@@ -177,6 +210,9 @@ class Order(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     brief: Mapped[dict] = mapped_column(JSONB, default=dict)   # заполненное ТЗ
     creator_id: Mapped[int | None] = mapped_column(ForeignKey("creators.id"))
+    # кого выбрал клиент после ТЗ: его тегают в топике и зовут в личку,
+    # но взять заказ может любой исполнитель с профилем этого направления
+    preferred_creator_id: Mapped[int | None] = mapped_column(ForeignKey("creators.id"))
     status: Mapped[OrderStatus] = mapped_column(
         SAEnum(OrderStatus), default=OrderStatus.published
     )
